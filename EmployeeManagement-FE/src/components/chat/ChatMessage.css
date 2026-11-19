@@ -1,0 +1,356 @@
+/* ── Chat Message Base ─────────────────────────────────────────────────────── */
+
+.chat-message {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+    animation: messageIn 0.2s ease-out;
+}
+
+@keyframes messageIn {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* User messages align right */
+.chat-message--user {
+    flex-direction: row-reverse;
+}
+
+.chat-message__avatar {
+    font-size: 1.25rem;
+    flex-shrink: 0;
+    margin-top: 2px;
+    width: 2rem;
+    text-align: center;
+}
+
+.chat-message__content {
+    display: flex;
+    flex-direction: column;
+    max-width: 80%;
+}
+
+.chat-message--user .chat-message__content {
+    align-items: flex-end;
+}
+
+/* ── Bubble ──────────────────────────────────────────────────────────────────*/
+
+.chat-message__bubble {
+    padding: 0.65rem 0.9rem;
+    border-radius: 1rem;
+    font-size: 0.875rem;
+    line-height: 1.55;
+    word-break: break-word;
+}
+
+.chat-message--user .chat-message__bubble {
+    background: var(--color-primary, #6366f1);
+    color: #fff;
+    border-bottom-right-radius: 0.25rem;
+}
+
+.chat-message--bot .chat-message__bubble {
+    background: var(--color-surface, #f1f5f9);
+    color: var(--color-text, #1e293b);
+    border-bottom-left-radius: 0.25rem;
+}
+
+.chat-message__text {
+    color: white;
+}
+
+/* Type-specific tints */
+.message--error .chat-message__bubble {
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+}
+
+.message--success .chat-message__bubble {
+    background: #f0fdf4;
+    border: 1px solid #86efac;
+}
+
+.message--confirmation .chat-message__bubble {
+    background: #fffbeb;
+    border: 1px solid #fcd34d;
+}
+
+.message--clarification .chat-message__bubble {
+    background: #eff6ff;
+    border: 1px solid #93c5fd;
+}
+
+/* ── Markdown inside bot bubble ──────────────────────────────────────────────*/
+
+.chat-message__markdown p {
+    margin: 0 0 0.4rem;
+}
+
+.chat-message__markdown p:last-child {
+    margin-bottom: 0;
+}
+
+.chat-message__markdown ul,
+.chat-message__markdown ol {
+    padding-left: 1.25rem;
+    margin: 0.25rem 0;
+}
+
+.chat-message__markdown li {
+    margin-bottom: 0.15rem;
+}
+
+.chat-message__markdown strong {
+    font-weight: 600;
+}
+
+.chat-message__markdown code {
+    font-family: monospace;
+    background: rgba(0, 0, 0, 0.06);
+    padding: 0.1em 0.35em;
+    border-radius: 3px;
+    font-size: 0.82em;
+}
+
+.chat-message__markdown table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-top: 0.5rem;
+    font-size: 0.8rem;
+}
+
+.chat-message__markdown th,
+.chat-message__markdown td {
+    border: 1px solid #e2e8f0;
+    padding: 0.3rem 0.5rem;
+    text-align: left;
+}
+
+.chat-message__markdown th {
+    background: #f8fafc;
+    font-weight: 600;
+}
+
+/* ── Timestamp + badge ───────────────────────────────────────────────────────*/
+
+.chat-message__time {
+    font-size: 0.7rem;
+    color: #94a3b8;
+    margin-top: 0.2rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.chat-message__badge {
+    font-size: 0.65rem;
+    padding: 0.1em 0.45em;
+    border-radius: 999px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.chat-message__badge--success {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.chat-message__badge--error {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.chat-message__badge--confirmation {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.chat-message__badge--clarification {
+    background: #dbeafe;
+    color: #2563eb;
+}
+
+.chat-message__badge--info {
+    background: #e0e7ff;
+    color: #4338ca;
+}
+
+/* ── Bulk tables ─────────────────────────────────────────────────────────────*/
+
+.bulk-result,
+.bulk-preview {
+    margin-top: 0.75rem;
+}
+
+.bulk-result__summary,
+.bulk-preview__summary {
+    display: flex;
+    gap: 0.4rem;
+    margin-bottom: 0.4rem;
+    flex-wrap: wrap;
+}
+
+.bulk-result__badge {
+    font-size: 0.72rem;
+    padding: 0.15em 0.55em;
+    border-radius: 999px;
+    font-weight: 600;
+}
+
+.bulk-result__badge--success {
+    background: #dcfce7;
+    color: #16a34a;
+}
+
+.bulk-result__badge--error {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.bulk-result__table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 0.775rem;
+}
+
+.bulk-result__table th,
+.bulk-result__table td {
+    border: 1px solid #e2e8f0;
+    padding: 0.25rem 0.45rem;
+    text-align: left;
+}
+
+.bulk-result__table th {
+    background: #f8fafc;
+    font-weight: 600;
+}
+
+.bulk-result__table .row--success {
+    background: #f0fdf4;
+}
+
+.bulk-result__table .row--error {
+    background: #fef2f2;
+}
+
+/* ── Employee Card ──────────────────────────────────────────────────────── */
+.employee-card {
+    margin-top: 0.75rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+}
+
+.employee-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.employee-card__name {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #212529;
+}
+
+.employee-card__id {
+    font-size: 0.85rem;
+    color: #6c757d;
+    background: #e9ecef;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+.employee-card__details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.employee-card__row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.employee-card__label {
+    font-size: 0.9rem;
+    color: #495057;
+    font-weight: 500;
+}
+
+.employee-card__value {
+    font-size: 0.9rem;
+    color: #212529;
+    font-weight: 400;
+}
+
+/* ── Employee List ─────────────────────────────────────────────────────── */
+.employee-list {
+    margin-top: 0.75rem;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+}
+
+.employee-list__count {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-bottom: 0.75rem;
+    font-weight: 500;
+}
+
+.employee-list__items {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.employee-list__item {
+    padding: 0.75rem;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+}
+
+.employee-list__item:hover {
+    border-color: #6366f1;
+    box-shadow: 0 2px 4px rgba(99, 102, 241, 0.1);
+}
+
+.employee-list__item-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.25rem;
+}
+
+.employee-list__item-id {
+    font-size: 0.75rem;
+    color: #6c757d;
+    background: #f8f9fa;
+    padding: 0.2rem 0.4rem;
+    border-radius: 3px;
+}
+
+.employee-list__item-details {
+    font-size: 0.85rem;
+    color: #6c757d;
+}

@@ -1,0 +1,122 @@
+/* ===================================
+   CONFIRM DIALOG
+   =================================== */
+
+.dialog-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(29, 29, 31, 0.4);
+    backdrop-filter: blur(4px);
+    z-index: 999;
+    animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+.dialog-content {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 420px;
+    width: 90vw;
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-backdrop);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-xl);
+    padding: 0;
+    z-index: 1000;
+    margin: 0;
+    animation: slideUp 0.3s ease-out;
+
+    &::backdrop {
+        background: transparent;
+    }
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translate(-50%, calc(-50% + 20px));
+    }
+
+    to {
+        opacity: 1;
+        transform: translate(-50%, -50%);
+    }
+}
+
+.dialog-header {
+    padding: var(--space-xl) var(--space-xl) var(--space-md);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.dialog-title {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin: 0;
+    letter-spacing: -0.01em;
+}
+
+.dialog-body {
+    padding: var(--space-lg) var(--space-xl);
+
+    p {
+        margin: 0;
+        font-size: var(--font-size-base);
+        color: var(--color-text-secondary);
+        line-height: var(--line-height-normal);
+    }
+}
+
+.dialog-footer {
+    padding: var(--space-md) var(--space-xl) var(--space-xl);
+    border-top: 1px solid rgba(255, 255, 255, 0.2);
+    display: flex;
+    gap: var(--space-md);
+    justify-content: flex-end;
+}
+
+.dialog-footer button {
+    flex: 0 0 auto;
+    min-width: 100px;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+    .dialog-content {
+        width: 85vw;
+        max-width: 380px;
+    }
+
+    .dialog-header {
+        padding: var(--space-lg) var(--space-lg) var(--space-md);
+    }
+
+    .dialog-title {
+        font-size: var(--font-size-md);
+    }
+
+    .dialog-body {
+        padding: var(--space-md) var(--space-lg);
+    }
+
+    .dialog-footer {
+        padding: var(--space-md) var(--space-lg) var(--space-lg);
+        flex-direction: column;
+    }
+
+    .dialog-footer button {
+        width: 100%;
+    }
+}

@@ -1,0 +1,105 @@
+/* ===================================
+   INPUT COMPONENT STYLES
+   =================================== */
+
+.input-wrapper {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+}
+
+.input-label {
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin-bottom: var(--space-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--space-xs);
+}
+
+.required-mark {
+    color: var(--color-error);
+    font-weight: var(--font-weight-bold);
+}
+
+.input-field {
+    padding: 11px 14px;
+    height: 44px;
+    border: 1px solid var(--color-border-input);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.95);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-base);
+    font-weight: var(--font-weight-regular);
+    transition: all var(--transition-normal);
+    -webkit-appearance: none;
+    appearance: none;
+
+    &::placeholder {
+        color: var(--color-text-placeholder);
+        font-weight: var(--font-weight-regular);
+    }
+
+    &:hover {
+        border-color: rgba(91, 111, 232, 0.3);
+        box-shadow: 0 2px 8px rgba(91, 111, 232, 0.05);
+    }
+
+    &:focus {
+        border-color: var(--color-primary-600);
+        background: #FFFFFF;
+        box-shadow: 0 0 0 3px rgba(91, 111, 232, 0.1);
+    }
+
+    &:disabled {
+        background: var(--color-disabled-bg);
+        border-color: var(--color-disabled-border);
+        color: var(--color-disabled-text);
+        cursor: not-allowed;
+        opacity: 0.6;
+    }
+
+    &.error {
+        border-color: var(--color-error);
+
+        &:focus {
+            box-shadow: 0 0 0 3px rgba(255, 59, 48, 0.1);
+        }
+    }
+}
+
+/* Number Input Spinners */
+input[type='number'].input-field {
+
+    &::-webkit-outer-spin-button,
+    &::-webkit-inner-spin-button {
+        -webkit-appearance: none;
+        margin: 0;
+    }
+}
+
+.input-error {
+    font-size: var(--font-size-xs);
+    color: var(--color-error);
+    margin-top: var(--space-xs);
+    font-weight: var(--font-weight-medium);
+    display: block;
+}
+
+.input-helper {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-tertiary);
+    margin-top: var(--space-xs);
+    font-weight: var(--font-weight-regular);
+    display: block;
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+    .input-field {
+        padding: 10px 12px;
+        height: 40px;
+        font-size: 16px;
+    }
+}

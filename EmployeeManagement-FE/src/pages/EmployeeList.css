@@ -1,0 +1,295 @@
+/* ===================================
+   EMPLOYEE LIST PAGE
+   =================================== */
+
+.list-container {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+}
+
+.list-card {
+    width: 100%;
+    max-width: var(--container-max-width);
+    background: var(--glass-bg);
+    backdrop-filter: var(--glass-backdrop);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-2xl);
+    box-shadow: var(--shadow-lg);
+    animation: slideUp 0.4s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ===== Controls Section ===== */
+
+.list-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-lg);
+    margin-bottom: var(--space-2xl);
+}
+
+/* ===== Loading State ===== */
+
+.list-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-2xl);
+    gap: var(--space-lg);
+    min-height: 400px;
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(91, 111, 232, 0.1);
+    border-top-color: var(--color-primary-600);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.list-loading p {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-base);
+}
+
+/* ===== Empty State ===== */
+
+.list-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-2xl);
+    min-height: 300px;
+    text-align: center;
+    gap: var(--space-md);
+}
+
+.list-empty p {
+    font-size: var(--font-size-lg);
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    margin: 0;
+}
+
+.empty-text {
+    font-size: var(--font-size-base);
+    color: var(--color-text-secondary);
+}
+
+/* ===== Table Section ===== */
+
+.list-table-wrapper {
+    overflow-x: auto;
+    margin-bottom: var(--space-2xl);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.list-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: var(--font-size-sm);
+}
+
+.list-table thead {
+    background: rgba(102, 126, 234, 0.06);
+    border-bottom: 2px solid rgba(255, 255, 255, 0.2);
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.list-table th {
+    padding: var(--space-md) var(--space-lg);
+    text-align: left;
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+    font-size: var(--font-size-sm);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.8;
+}
+
+.list-table td {
+    padding: var(--space-lg);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    color: var(--color-text-primary);
+}
+
+.table-row {
+    transition: all var(--transition-normal);
+
+    &:hover {
+        background: rgba(102, 126, 234, 0.04);
+    }
+
+    &:last-child td {
+        border-bottom: none;
+    }
+}
+
+/* ===== Table Cells ===== */
+
+.cell-name {
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-text-primary);
+}
+
+.cell-email {
+    color: var(--color-text-secondary);
+    word-break: break-all;
+    max-width: 250px;
+}
+
+.cell-tag {
+    display: inline-block;
+    background: rgba(102, 126, 234, 0.12);
+    color: var(--color-primary-600);
+    padding: var(--space-xs) var(--space-md);
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-medium);
+    white-space: nowrap;
+}
+
+.cell-salary {
+    font-weight: var(--font-weight-semibold);
+    color: var(--color-primary-600);
+    font-variant-numeric: tabular-nums;
+}
+
+.cell-date {
+    color: var(--color-text-secondary);
+    font-size: var(--font-size-xs);
+    white-space: nowrap;
+}
+
+/* ===== Pagination Section ===== */
+
+.list-pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: var(--space-xl);
+    margin-top: var(--space-xl);
+}
+
+.pagination-info {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-secondary);
+    font-weight: var(--font-weight-medium);
+    min-width: 140px;
+    text-align: center;
+}
+
+/* ===== Responsive Design ===== */
+
+@media (max-width: 1024px) {
+    .list-card {
+        padding: var(--space-xl);
+    }
+
+    .list-controls {
+        gap: var(--space-md);
+    }
+
+    .list-table th,
+    .list-table td {
+        padding: var(--space-md);
+        font-size: var(--font-size-xs);
+    }
+}
+
+@media (max-width: 768px) {
+    .list-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .list-table th,
+    .list-table td {
+        padding: var(--space-md) var(--space-sm);
+    }
+
+    .cell-email {
+        max-width: 150px;
+    }
+}
+
+@media (max-width: 640px) {
+    .list-card {
+        padding: var(--space-lg);
+        border-radius: var(--radius-md);
+    }
+
+    .list-controls {
+        gap: var(--space-md);
+        margin-bottom: var(--space-xl);
+    }
+
+    .list-table-wrapper {
+        margin-bottom: var(--space-xl);
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .list-table {
+        font-size: var(--font-size-xs);
+    }
+
+    .list-table th,
+    .list-table td {
+        padding: var(--space-sm) var(--space-md);
+    }
+
+    .list-table th {
+        font-size: var(--font-size-xs);
+    }
+
+    .cell-email {
+        max-width: 100px;
+        font-size: var(--font-size-xs);
+    }
+
+    .cell-tag {
+        font-size: var(--font-size-xs);
+        padding: var(--space-xs) var(--space-sm);
+    }
+
+    .list-pagination {
+        gap: var(--space-md);
+        flex-wrap: wrap;
+    }
+
+    .pagination-info {
+        min-width: 100%;
+        order: 3;
+    }
+}
+
+/* ── Additions for refactored EmployeeList ── */
+.action-buttons {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: nowrap;
+}
