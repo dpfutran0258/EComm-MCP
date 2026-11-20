@@ -4,8 +4,7 @@ An employee management demo: an ASP.NET Core Web API with PostgreSQL, and a Reac
 that turns natural-language requests (and pasted tables) into employee create, read, update and delete operations.
 The assistant uses a large language model through [OpenRouter](https://openrouter.ai).
 
-This README is the single source of truth for the project. Older notes live in [docs/archive](docs/archive/README.md)
-and may not match the code.
+This README is the single source of truth for the project.
 
 > **About the name:** the repository folder is called `EComm-MCP`, but this is not an e-commerce application.
 > The "MCP" is real: the API hosts an [MCP](https://modelcontextprotocol.io) server (`/mcp`) whose tools manage
@@ -288,7 +287,6 @@ EComm-MCP/
 │       └── EmployeeManagement.Tests/          # xUnit: agent loop, MCP tools, in-memory API + MCP integration tests
 ├── EmployeeManagement-FE/                 # React + TypeScript + Vite frontend
 │   └── src/  (api/, components/, hooks/, pages/, types/)
-├── docs/archive/                          # Historical notes (not maintained)
 ├── GAP_ANALYSIS.md                        # Analysis of the pre-MCP implementation (see its status note)
 ├── start-dev.ps1                          # Starts API + frontend for local development
 └── test-chat-api.ps1                      # Sends one chat message to POST /api/chat

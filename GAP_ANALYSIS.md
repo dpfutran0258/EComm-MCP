@@ -1,6 +1,6 @@
 # Gap Analysis: AI Chat Intents and Frontend/Backend Integration
 
-**Scope:** `EmployeeManagement/` (.NET 10 API) and `EmployeeManagement-FE/` (React + Vite), compared with the intended functionality in `.kiro/specs/ai-chatbot-crud/` and `README.md`.
+**Scope:** `EmployeeManagement/` (.NET 10 API) and `EmployeeManagement-FE/` (React + Vite), compared with the intended functionality in the README and the (since removed) `.kiro` specs.
 **Method:** Static code review only. I did not run the app, the tests or the LLM. Findings marked **(verify)** rest on known framework behaviour and should be confirmed with a repro test before fixing.
 **Status:** This report describes the implementation *before* the MCP rewrite. The MCP server, the tool-calling chat host, server-confirmed deletes, the context-in-request contract and the frontend refresh/confirm UI now exist (see README, "How the chat works"). Gaps G-01 to G-14, G-16 to G-18, G-20, F-01 to F-08 and F-10 are addressed by that change; G-15 (prompt injection) is reduced but not eliminated; G-19 is mitigated; F-03 (versioning) and F-04 (rate limiting) remain open, as does authentication.
 
@@ -70,7 +70,7 @@ Intents come from `ChatIntent.cs`, the system prompt in `AISystemPromptBuilder.c
 - **Actual:** There is no MCP server or MCP SDK anywhere in the code. Intent detection is a single LLM prompt in `AISystemPromptBuilder` that returns JSON.
 - **Stale artifacts:**
   - `EmployeeManagement.Infrastructure.Tests/MCP/ChatMcpServerTests.cs` imports `EmployeeManagement.Infrastructure.MCP` and `ChatMcpServer`, which no longer exist. The project is not in the `.slnx`.
-  - `.kiro/specs/*` and `docs/archive/*` still describe MCP and Gemini.
+  - The old `.kiro/specs/*` and `docs/archive/*` notes described MCP and Gemini; they have been deleted.
   - The repo folder is named `EComm-MCP`. It is not an e-commerce app.
   - `AISystemPromptBuilder` still mentions Gemini in its comments.
 - **Impact:** The question "are all intents in the MCP server captured?" has no direct answer. The real intent layer is the LLM prompt, and section 3 covers it.
@@ -204,4 +204,4 @@ Intents come from `ChatIntent.cs`, the system prompt in `AISystemPromptBuilder.c
 
 - I did not run the API, the frontend, the test suites or a real LLM call. Section 5 findings G-16 and G-17 describe likely behaviour, not observed behaviour.
 - G-02 and G-20 rely on documented System.Text.Json and ASP.NET Core middleware behaviour. A 20-line repro test should confirm them before a fix.
-- I did not check the archived documents in `docs/archive/` beyond noting they are stale.
+- The archived documents in `docs/archive/` were stale and have since been deleted.
