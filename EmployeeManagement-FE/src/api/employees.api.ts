@@ -1,4 +1,4 @@
-import apiClient from './client'
+import apiClient, { isApiError } from './client'
 import type {
     Employee,
     CreateEmployeePayload,
@@ -8,14 +8,28 @@ import type {
 } from '../types/employee.types'
 
 export const employeesApi = {
-    getAll(params: EmployeeListParams = {}): Promise<EmployeeListResponse> {
+    getAll(params: EmployeeListParams = {}, signal?: AbortSignal): Promise<EmployeeListResponse> {
         return apiClient
-            .get<EmployeeListResponse>('/employees', { params })
+            .get<EmployeeListResponse>('/employees', { params, signal })
             .then((r) => r.data)
     },
 
-    getById(id: number): Promise<Employee> {
-        return apiClient.get<Employee>(`/employees/${id}`).then((r) => r.data)
+    getById(id: number, signal?: AbortSignal): Promise<Employee> {
+        return apiClient.get<Employee>(`/employees/${id}`, { signal }).then((r) => r.data)
+    },
+
+    /**
+     * Distinct department names for the filter suggestions.
+     * Resolves to an empty list when the endpoint is unavailable (e.g. 404 on older backends).
+     */
+    getDepartments(signal?: AbortSignal): Promise<string[]> {
+        return apiClient
+            .get<unknown>('/employees/departments', { signal })
+            .then((r) => (Array.isArray(r.data) ? r.data.filter((d): d is string => typeof d === 'string') : []))
+            .catch((err: unknown) => {
+                if (isApiError(err) && err.isCanceled) throw err
+                return []
+            })
     },
 
     create(payload: CreateEmployeePayload): Promise<Employee> {

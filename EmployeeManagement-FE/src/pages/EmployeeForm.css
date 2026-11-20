@@ -119,3 +119,23 @@ width: 100%;
     flex-direction: column;
     gap: 1rem;
 }
+/* ===== Not-found / load-error state ===== */
+
+.form-state {
+    text-align: center;
+}
+
+.form-state .form-actions {
+    justify-content: center;
+    align-items: center;
+}
+
+.form-state__text {
+    color: var(--color-text-secondary);
+    margin-bottom: 1rem;
+}
+
+.form-state__link {
+    color: var(--color-primary-600);
+    font-weight: var(--font-weight-semibold);
+}

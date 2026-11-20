@@ -18,37 +18,37 @@
     gap: var(--space-md);
     animation: slideIn 0.3s ease-out;
     z-index: 1000;
+}
 
-    &--success {
-        border-left: 4px solid var(--color-success);
+.toast--success {
+    border-left: 4px solid var(--color-success);
 
-        .toast-message {
-            color: var(--color-success);
-        }
+    .toast-message {
+        color: var(--color-success);
     }
+}
 
-    &--error {
-        border-left: 4px solid var(--color-error);
+.toast--error {
+    border-left: 4px solid var(--color-error);
 
-        .toast-message {
-            color: var(--color-error);
-        }
+    .toast-message {
+        color: var(--color-error);
     }
+}
 
-    &--info {
-        border-left: 4px solid var(--color-info);
+.toast--info {
+    border-left: 4px solid var(--color-info);
 
-        .toast-message {
-            color: var(--color-info);
-        }
+    .toast-message {
+        color: var(--color-info);
     }
+}
 
-    &--warning {
-        border-left: 4px solid var(--color-warning);
+.toast--warning {
+    border-left: 4px solid var(--color-warning);
 
-        .toast-message {
-            color: var(--color-warning);
-        }
+    .toast-message {
+        color: var(--color-warning);
     }
 }
 

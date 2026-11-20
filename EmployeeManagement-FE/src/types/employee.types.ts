@@ -1,3 +1,9 @@
+/**
+ * Optimistic-concurrency token. Optional until the backend exposes it on
+ * EmployeeDto; when present it is sent back unchanged on update.
+ */
+export type EmployeeVersion = string | number
+
 export interface Employee {
     id: number
     fullName: string
@@ -6,6 +12,7 @@ export interface Employee {
     salary: number
     createdAt: string
     updatedAt: string
+    version?: EmployeeVersion
 }
 
 export interface CreateEmployeePayload {
@@ -20,6 +27,7 @@ export interface UpdateEmployeePayload {
     email: string
     department: string
     salary: number
+    version?: EmployeeVersion
 }
 
 export interface EmployeeListResponse {

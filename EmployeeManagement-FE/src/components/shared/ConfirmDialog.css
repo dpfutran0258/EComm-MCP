@@ -2,15 +2,6 @@
    CONFIRM DIALOG
    =================================== */
 
-.dialog-overlay {
-    position: fixed;
-    inset: 0;
-    background: rgba(29, 29, 31, 0.4);
-    backdrop-filter: blur(4px);
-    z-index: 999;
-    animation: fadeIn 0.2s ease-out;
-}
-
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -39,7 +30,9 @@
     animation: slideUp 0.3s ease-out;
 
     &::backdrop {
-        background: transparent;
+        background: rgba(29, 29, 31, 0.4);
+        backdrop-filter: blur(4px);
+        animation: fadeIn 0.2s ease-out;
     }
 }
 

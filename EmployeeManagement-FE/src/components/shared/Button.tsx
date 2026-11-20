@@ -1,3 +1,4 @@
+import { forwardRef } from 'react'
 import './Button.css'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -7,7 +8,7 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     children: React.ReactNode
 }
 
-export default function Button({
+const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button({
     variant = 'primary',
     size = 'md',
     isLoading = false,
@@ -15,9 +16,10 @@ export default function Button({
     children,
     className,
     ...props
-}: ButtonProps) {
+}, ref) {
     return (
         <button
+            ref={ref}
             className={`btn btn--${variant} btn--${size} ${className || ''}`}
             disabled={disabled || isLoading}
             {...props}
@@ -32,4 +34,6 @@ export default function Button({
             )}
         </button>
     )
-}
+})
+
+export default Button

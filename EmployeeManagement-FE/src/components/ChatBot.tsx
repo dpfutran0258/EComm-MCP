@@ -1,5 +1,6 @@
 import { useEffect, useRef, memo } from 'react'
 import { useChat } from '../hooks/useChat'
+import { CHAT_PANEL_ID } from '../constants/ui'
 import ChatMessage from './chat/ChatMessage'
 import ChatInput from './chat/ChatInput'
 import './ChatBot.css'
@@ -16,16 +17,30 @@ interface ChatBotProps {
 function ChatBot({ isOpen, onClose }: ChatBotProps) {
     const { messages, isLoading, sendMessage, clearMessages } = useChat()
     const bottomRef = useRef<HTMLDivElement>(null)
+    const panelRef = useRef<HTMLElement>(null)
 
     // Scroll to latest message
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+        bottomRef.current?.scrollIntoView?.({ behavior: 'smooth' })
     }, [messages])
 
-    // Close on Escape
+    // Move focus into the panel on open and back to the opener on close
     useEffect(() => {
         if (!isOpen) return
-        const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+        const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
+        const field = panelRef.current?.querySelector<HTMLElement>('textarea, input')
+        ;(field ?? panelRef.current)?.focus()
+        return () => {
+            if (opener?.isConnected) opener.focus()
+        }
+    }, [isOpen])
+
+    // Close on Escape (unless something inside, e.g. a dialog, already handled it)
+    useEffect(() => {
+        if (!isOpen) return
+        const handler = (e: KeyboardEvent) => {
+            if (e.key === 'Escape' && !e.defaultPrevented) onClose()
+        }
         window.addEventListener('keydown', handler)
         return () => window.removeEventListener('keydown', handler)
     }, [isOpen, onClose])
@@ -39,9 +54,12 @@ function ChatBot({ isOpen, onClose }: ChatBotProps) {
 
             {/* Panel */}
             <section
+                ref={panelRef}
+                id={CHAT_PANEL_ID}
                 className="chatbot"
-                role="complementary"
+                role="dialog"
                 aria-label="Employee AI Assistant"
+                tabIndex={-1}
             >
                 {/* Header */}
                 <header className="chatbot__header">
