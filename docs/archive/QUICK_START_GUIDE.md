@@ -1,3 +1,5 @@
+> ARCHIVED: historical notes, may not match current code. See README.md.
+
 # 🚀 Quick Start Guide - Gemini AI Chatbot
 
 ## ⚡ 5-Minute Setup

@@ -1,3 +1,5 @@
+> ARCHIVED: historical notes, may not match current code. See README.md.
+
 # Database Setup Guide
 
 ## Current Status

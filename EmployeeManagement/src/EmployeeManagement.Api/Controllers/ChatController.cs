@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using EmployeeManagement.Application.AI;
 using EmployeeManagement.Application.DTOs;
 using EmployeeManagement.Application.Services;
 
@@ -14,11 +15,16 @@ namespace EmployeeManagement.Api.Controllers;
 public sealed class ChatController : ControllerBase
 {
     private readonly ChatService _chatService;
+    private readonly OpenRouterProviderOptions _providerOptions;
     private readonly ILogger<ChatController> _logger;
 
-    public ChatController(ChatService chatService, ILogger<ChatController> logger)
+    public ChatController(
+        ChatService chatService,
+        OpenRouterProviderOptions providerOptions,
+        ILogger<ChatController> logger)
     {
         _chatService = chatService;
+        _providerOptions = providerOptions;
         _logger = logger;
     }
 
@@ -27,10 +33,10 @@ public sealed class ChatController : ControllerBase
     /// The response may describe an employee operation that was executed,
     /// ask a clarifying question, or request confirmation for destructive actions.
     /// </summary>
-    /// <param name="request">Message, session ID, context, and optional provider override.</param>
+    /// <param name="request">Message, session ID, context, and optional allow-listed model override.</param>
     /// <param name="cancellationToken">Request cancellation token.</param>
     /// <response code="200">Message processed successfully.</response>
-    /// <response code="400">Invalid request (empty message or missing session ID).</response>
+    /// <response code="400">Invalid request (empty message, missing session ID, or a model that is not allowed).</response>
     [HttpPost("message")]
     [ProducesResponseType(typeof(ChatResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -47,11 +53,15 @@ public sealed class ChatController : ControllerBase
         if (string.IsNullOrWhiteSpace(request.SessionId))
             return BadRequest(new { error = "SessionId is required." });
 
+        if (!string.IsNullOrWhiteSpace(request.PreferredModel) &&
+            !_providerOptions.IsModelAllowed(request.PreferredModel))
+            return BadRequest(new { error = "PreferredModel is not allowed." });
+
         _logger.LogInformation(
-            "Chat request. Session={SessionId}, MessageLength={Len}, Provider={Provider}, ContextKeys={ContextKeys}",
+            "Chat request. Session={SessionId}, MessageLength={Len}, Model={Model}, ContextKeys={ContextKeys}",
             request.SessionId,
             request.Message.Length,
-            request.PreferredProvider ?? "default",
+            request.PreferredModel ?? "default",
             request.Context != null && request.Context.Count > 0 
                 ? string.Join(", ", request.Context.Keys) 
                 : "empty");
@@ -69,7 +79,6 @@ public sealed class ChatController : ControllerBase
             request.Message,
             request.SessionId,
             request.Context ?? new Dictionary<string, object>(),
-            request.PreferredProvider,
             request.PreferredModel,
             cancellationToken);
 

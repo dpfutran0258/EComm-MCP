@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Serilog;
 using EmployeeManagement.Api.Middleware;
 using EmployeeManagement.Application.AI;
@@ -60,8 +61,11 @@ try
     });
 
     // ── Database ─────────────────────────────────────────────────────────────
-    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-        ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is required.");
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    if (string.IsNullOrWhiteSpace(connectionString))
+        throw new InvalidOperationException(
+            "Connection string 'DefaultConnection' is required. Set it with " +
+            "'dotnet user-secrets set \"ConnectionStrings:DefaultConnection\" \"<value>\"'.");
 
     builder.Services.AddDbContext<EmployeeManagementDbContext>(opts =>
         opts.UseNpgsql(connectionString)
@@ -69,23 +73,37 @@ try
             .LogTo(message => Log.Debug("{Sql}", message), LogLevel.Debug));
 
     // ── AI Provider Options ───────────────────────────────────────────────────
-    var aiOptions = builder.Configuration.GetSection(AIOptions.SectionName).Get<AIOptions>()
-                 ?? new AIOptions();
+    // Validated at startup (ValidateOnStart) so misconfiguration fails fast instead of on the first chat.
+    builder.Services.AddOptions<AIOptions>()
+        .Bind(builder.Configuration.GetSection(AIOptions.SectionName))
+        .Validate(o => !string.IsNullOrWhiteSpace(o.OpenRouter.ApiKey),
+            "AI:OpenRouter:ApiKey is required. Set it with 'dotnet user-secrets set \"AI:OpenRouter:ApiKey\" \"<key>\"'.")
+        .Validate(o => !string.IsNullOrWhiteSpace(o.OpenRouter.Model),
+            "AI:OpenRouter:Model is required.")
+        .Validate(o => Uri.TryCreate(o.OpenRouter.BaseUrl, UriKind.Absolute, out var uri)
+                       && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp),
+            "AI:OpenRouter:BaseUrl must be an absolute http(s) URI.")
+        .Validate(o => o.OpenRouter.TimeoutSeconds is >= 1 and <= 300,
+            "AI:OpenRouter:TimeoutSeconds must be between 1 and 300.")
+        .Validate(o => o.OpenRouter.MaxOutputTokens > 0,
+            "AI:OpenRouter:MaxOutputTokens must be greater than 0.")
+        .ValidateOnStart();
 
-    builder.Services.AddSingleton(aiOptions);
-    builder.Services.AddSingleton(aiOptions.OpenRouter);
+    builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<AIOptions>>().Value);
+    builder.Services.AddSingleton(sp => sp.GetRequiredService<AIOptions>().OpenRouter);
 
     // ── AI Provider HttpClients + registrations ──────────────────────────────
     // Named HttpClients — IHttpClientFactory manages socket pooling correctly.
-    builder.Services.AddHttpClient("OpenRouter", client =>
-        client.Timeout = TimeSpan.FromSeconds(aiOptions.OpenRouter.TimeoutSeconds));
+    // The provider sets HttpClient.Timeout from the validated options.
+    builder.Services.AddHttpClient("OpenRouter");
 
     // Register OpenRouter as the single AI provider (no factory needed)
     builder.Services.AddSingleton<IAIProviderService>(sp =>
     {
         var factory = sp.GetRequiredService<IHttpClientFactory>();
         var logger  = sp.GetRequiredService<ILogger<OpenRouterAIProvider>>();
-        return new OpenRouterAIProvider(aiOptions.OpenRouter, logger, factory.CreateClient("OpenRouter"));
+        var options = sp.GetRequiredService<OpenRouterProviderOptions>();
+        return new OpenRouterAIProvider(options, logger, factory.CreateClient("OpenRouter"));
     });
 
     // ── Application Services ──────────────────────────────────────────────────
@@ -100,6 +118,10 @@ try
 
     var app = builder.Build();
 
+    // ── Resolve AI provider first (validates AI options before touching the DB) ─
+    var aiProvider = app.Services.GetRequiredService<IAIProviderService>();
+    Log.Information("AI provider ready: {Provider}", aiProvider.ProviderName);
+
     // ── Auto-migrate database ─────────────────────────────────────────────────
     using (var scope = app.Services.CreateScope())
     {
@@ -107,10 +129,6 @@ try
         db.Database.Migrate();
         Log.Information("Database migration applied.");
     }
-
-    // ── Log AI provider at startup ────────────────────────────────────────────
-    var aiProvider = app.Services.GetRequiredService<IAIProviderService>();
-    Log.Information("AI provider ready: {Provider}", aiProvider.ProviderName);
 
     // ── Middleware pipeline ───────────────────────────────────────────────────
     app.UseMiddleware<CorrelationIdMiddleware>();
@@ -137,9 +155,10 @@ try
 
     app.Run();
 }
-catch (Exception ex)
+catch (Exception ex) when (ex is not HostAbortedException) // HostAbortedException is expected under 'dotnet ef'
 {
-    Log.Fatal(ex, "Application failed to start.");
+    Log.Fatal(ex, "Application terminated unexpectedly.");
+    Environment.ExitCode = 1;
 }
 finally
 {

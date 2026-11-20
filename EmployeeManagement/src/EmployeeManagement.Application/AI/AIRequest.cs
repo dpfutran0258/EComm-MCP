@@ -21,12 +21,10 @@ public sealed class AIRequest
     public List<EmployeeContextItem> EmployeeContext { get; init; } = new();
 
     /// <summary>
-    /// Optional provider override (e.g. "Gemini").
-    /// When set, the factory will use this provider instead of the configured default.
+    /// Optional model override. Honoured only when listed in the provider's allowed models;
+    /// otherwise the configured model is used.
     /// </summary>
-    public string? PreferredProvider { get; init; }
 
-    /// <summary>Optional model override (e.g. "gemini-2.0-flash-exp").</summary>
     public string? PreferredModel { get; init; }
 
     /// <summary>Arbitrary key-value metadata passed through to the provider.</summary>

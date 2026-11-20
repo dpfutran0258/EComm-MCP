@@ -1,3 +1,5 @@
+> ARCHIVED: historical notes, may not match current code. See README.md.
+
 # ✅ Google Gemini AI Implementation - COMPLETE
 
 ## 🎉 Implementation Status: **100% COMPLETE**

@@ -1,3 +1,5 @@
+> SUPERSEDED: this spec describes the original design. The ChatMcpServer (MCP intent detection) and the Gemini provider were removed; the current code uses OpenRouter only and has no MCP server. There are currently no passing automated tests. See /README.md for the current state.
+
 # AI Chatbot CRUD Feature - Technical Design Document
 
 **Feature Name:** AI-Powered Chatbot for Employee Management  

@@ -41,7 +41,8 @@ public sealed class OpenRouterAIProvider : IAIProviderService
     public async Task<AIResponse> ProcessChatAsync(AIRequest request, CancellationToken cancellationToken = default)
     {
         var start = DateTime.UtcNow;
-        var model = string.IsNullOrWhiteSpace(request.PreferredModel) ? _options.Model : request.PreferredModel;
+        // Only honour a client-requested model when it is explicitly allow-listed.
+        var model = _options.IsModelAllowed(request.PreferredModel) ? request.PreferredModel! : _options.Model;
         var retryCounter = new RetryCounter();
 
         try

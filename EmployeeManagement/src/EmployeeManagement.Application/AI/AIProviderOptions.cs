@@ -52,4 +52,16 @@ public sealed class OpenRouterProviderOptions : BaseProviderOptions
 
     /// <summary>OpenRouter base URL.</summary>
     public string BaseUrl { get; set; } = "https://openrouter.ai/api/v1";
+
+    /// <summary>
+    /// Models a client may request via <c>PreferredModel</c>. The configured <see cref="BaseProviderOptions.Model"/>
+    /// is always allowed. Any other model must be listed here explicitly.
+    /// </summary>
+    public string[] AllowedModels { get; set; } = Array.Empty<string>();
+
+    /// <summary>Returns true when <paramref name="model"/> is the configured model or listed in <see cref="AllowedModels"/>.</summary>
+    public bool IsModelAllowed(string? model) =>
+        !string.IsNullOrWhiteSpace(model) &&
+        (string.Equals(model, Model, StringComparison.Ordinal) ||
+         AllowedModels.Contains(model, StringComparer.Ordinal));
 }

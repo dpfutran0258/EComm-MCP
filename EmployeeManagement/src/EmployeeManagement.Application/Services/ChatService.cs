@@ -57,7 +57,6 @@ public sealed class ChatService
         string userMessage,
         string sessionId,
         Dictionary<string, object> context,
-        string? preferredProvider = null,
         string? preferredModel = null,
         CancellationToken cancellationToken = default)
     {
@@ -97,7 +96,6 @@ public sealed class ChatService
                 SessionId = sessionId,
                 History = history,
                 EmployeeContext = employeeContext,
-                PreferredProvider = preferredProvider,
                 PreferredModel = preferredModel
             };
 
@@ -684,7 +682,7 @@ public sealed class ChatService
             {
                 return BuildResponse(
                     $"⚠️ Bulk update by department '{dept}' requires confirmation. " +
-                    "Please confirm: 'Update all employees in {dept} department'",
+                    $"Please confirm: 'Update all employees in {dept} department'",
                     ChatResponseType.CLARIFICATION,
                     null,
                     ctx);

@@ -1,3 +1,5 @@
+> ARCHIVED: historical notes, may not match current code. See README.md.
+
 # 🤖 Employee Management System - Google Gemini AI Integration
 
 ## ✨ Overview

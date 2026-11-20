@@ -17,11 +17,8 @@ public sealed class ChatRequest
     public Dictionary<string, object> Context { get; set; } = new();
 
     /// <summary>
-    /// Optional AI provider override (e.g. "Gemini", "OpenRouter").
-    /// Falls back to the configured default when null.
+    /// Optional model override. Must be one of the server's allowed models
+    /// (AI:OpenRouter:AllowedModels or the configured Model); otherwise the request is rejected with 400.
     /// </summary>
-    public string? PreferredProvider { get; set; }
-
-    /// <summary>Optional model override (e.g. "nvidia/nemotron-3-ultra-550b-a55b:free").</summary>
     public string? PreferredModel { get; set; }
 }

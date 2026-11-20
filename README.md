@@ -1,207 +1,267 @@
-# Employee Management System — AI-Powered
+# Employee Management with AI chat
 
-A production-ready employee management application with a natural-language AI chat assistant.  
-Manage employees through conversation, pasted tables, follow-up messages, and bulk operations.
+An employee management demo: an ASP.NET Core Web API with PostgreSQL, and a React frontend with a chat assistant
+that turns natural-language requests (and pasted tables) into employee create, read, update and delete operations.
+The assistant uses a large language model through [OpenRouter](https://openrouter.ai).
+
+This README is the single source of truth for the project. Older notes live in [docs/archive](docs/archive/README.md)
+and may not match the code.
+
+> **About the name:** the repository folder is called `EComm-MCP`, but the project is neither an e-commerce
+> application nor an MCP (Model Context Protocol) server. An earlier MCP-based design was removed.
 
 ---
 
-## Tech Stack
+## Security status
+
+> **There is no authentication or authorization yet.** Every API endpoint, including create, update, delete and
+> the AI chat endpoint, can be called by anyone who can reach the server. **Run it on localhost only.** Do not
+> expose it on a network or deploy it until authentication is added.
+
+What is in place today:
+
+- Secrets (database connection string, OpenRouter API key) are read from .NET user-secrets or environment variables.
+  `appsettings*.json` keeps them blank, and they must never be committed.
+- Startup fails with a non-zero exit code if the connection string or the AI settings are missing or invalid.
+- Clients cannot choose arbitrary LLM models. `preferredModel` must be in `AI:OpenRouter:AllowedModels`
+  (or equal the configured `Model`), otherwise the chat endpoint returns `400`.
+- The AI never touches the database directly. It only proposes an intent and entities, and the backend validates
+  them with FluentValidation before saving.
+- CORS allows only `http://localhost:5173` and `http://localhost:3000` by default.
+
+This is a working localhost demo, not a production-ready system. See [Known issues](#known-issues).
+
+---
+
+## Tech stack
 
 | Layer | Technology |
 |---|---|
-| Backend | .NET 10 / ASP.NET Core Web API |
-| Database | PostgreSQL 14+ via EF Core 10 |
-| AI — Google | Google Gemini API (REST) |
-| AI — OpenRouter | OpenRouter (NVIDIA Nemotron 3 Ultra, GPT-4o-mini, etc.) |
-| Frontend | React 18, TypeScript, Vite |
-| Routing | React Router v6 |
-| HTTP client | Axios |
-| Logging | Serilog (structured, with correlation IDs) |
+| Backend | .NET 10, ASP.NET Core Web API (controllers), clean architecture: Api / Application / Domain / Infrastructure |
+| Database | PostgreSQL via EF Core 10 (Npgsql) |
+| AI | OpenRouter chat completions API (OpenAI-compatible). Default model `nvidia/nemotron-3-ultra-550b-a55b:free` |
 | Validation | FluentValidation |
+| Logging | Serilog (console), with an `X-Correlation-ID` header on every request |
+| API docs | Swagger (Swashbuckle), Development environment only |
+| Frontend | React 18, TypeScript, Vite 5 |
+| Routing | React Router 7 (`react-router-dom` ^7) |
+| HTTP client | Axios |
 
 ---
 
-## Quick Start
-
-### 1. Prerequisites
+## Prerequisites
 
 - .NET 10 SDK
-- Node.js 18+
-- PostgreSQL 14+ running on `localhost:5432`
+- Node.js 18 or later
+- PostgreSQL 14 or later on `localhost:5432`, with a database you can use (for example `employee_management_dev`)
+- An OpenRouter API key
 
-### 2. Configure AI Keys
+---
 
-Edit `EmployeeManagement/src/EmployeeManagement.Api/appsettings.json`:
+## Setup
 
-```json
-{
-  "AI": {
-    "DefaultProvider": "OpenRouter",
-    "OpenRouter": { "ApiKey": "sk-or-v1-..." },
-    "Gemini":     { "ApiKey": "AIzaSy..." }
-  }
-}
-```
+### 1. Configure secrets (user-secrets)
 
-> **Never commit real API keys.** Use environment variables or a secrets manager in production.
-
-### 3. Start the backend
+The API project already has a `UserSecretsId`. Run these from the repository root and replace the placeholders
+with your own values:
 
 ```powershell
-cd EmployeeManagement
-dotnet restore EmployeeManagement.sln
-dotnet run --project src\EmployeeManagement.Api
-# API → http://localhost:5000
-# Swagger → http://localhost:5000/swagger
+cd EmployeeManagement/src/EmployeeManagement.Api
+
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=<db-name>;Username=<user>;Password=<password>"
+dotnet user-secrets set "AI:OpenRouter:ApiKey" "<your-openrouter-api-key>"
 ```
 
-### 4. Start the frontend
+User-secrets are loaded only in the `Development` environment (the default for `dotnet run` with the `http`
+launch profile). In any other environment, use environment variables instead, for example
+`ConnectionStrings__DefaultConnection` and `AI__OpenRouter__ApiKey`.
+
+Never put real values in `appsettings.json`, `appsettings.Development.json`, scripts or docs.
+
+### 2. AI settings
+
+Non-secret AI settings are in `EmployeeManagement/src/EmployeeManagement.Api/appsettings.json` under `AI:OpenRouter`:
+
+| Setting | Default | Notes |
+|---|---|---|
+| `Model` | `nvidia/nemotron-3-ultra-550b-a55b:free` | Model used for every request unless an allowed `preferredModel` is sent |
+| `AllowedModels` | `["nvidia/nemotron-3-ultra-550b-a55b:free"]` | Models a client may request with `preferredModel` |
+| `BaseUrl` | `https://openrouter.ai/api/v1` | Must be an absolute http(s) URI |
+| `TimeoutSeconds` | `120` | Per-request HTTP timeout. Must be between 1 and 300 |
+| `MaxOutputTokens`, `Temperature`, `TopP` | `2048`, `0.7`, `0.95` | Sampling settings |
+| `EnableDetailedLogging` | `false` (`true` in Development) | Extra debug-level provider logs |
+
+The API validates these settings at startup and exits with code 1 if they are invalid or the API key is missing.
+
+### 3. Database
+
+On startup the API applies EF Core migrations to the configured database (`Database.Migrate()`).
+See [Known issues](#known-issues) about migrating a brand-new, empty database.
+
+### 4. Run
+
+The easiest way is the start script from the repository root:
 
 ```powershell
+./start-dev.ps1          # asks before stopping anything already listening on ports 5000/5173
+./start-dev.ps1 -Force   # stops whatever listens on ports 5000/5173 without asking
+```
+
+The script only stops processes that are listening on the API and frontend ports. It does not stop other
+`dotnet` or `node` processes.
+
+Or run each part yourself:
+
+```powershell
+# Backend
+dotnet run --project EmployeeManagement/src/EmployeeManagement.Api --launch-profile http
+
+# Frontend (second terminal)
 cd EmployeeManagement-FE
 npm install
 npm run dev
-# App → http://localhost:5173
 ```
 
----
-
-## AI Provider Selection
-
-The default provider is set in `appsettings.json`:
-
-```json
-{ "AI": { "DefaultProvider": "OpenRouter" } }
-```
-
-You can override per-request from the frontend by sending `preferredProvider` in the chat request:
-
-```json
-{ "message": "...", "sessionId": "...", "preferredProvider": "Gemini" }
-```
-
-To add a new provider, implement `IAIProviderService` and register it in DI — no other code changes needed.
-
----
-
-## Chat Examples
-
-| User says | What happens |
+| What | URL |
 |---|---|
-| "Add Yusuf, yusuf@co.com, IT, 50000" | AI extracts entities → backend creates employee |
-| "Add Yusuf" | AI asks for missing email, department, salary across turns |
-| "Show all employees" | Returns paginated employee list |
-| "Who works in IT?" | Filtered search |
-| "Update his salary to 60000" | Resolves pronoun from context → updates |
-| "Delete Yusuf" | Finds employee → asks for confirmation |
-| "confirm" | Executes deletion |
-| Paste a Markdown table | Parses rows → shows preview → creates on confirmation |
+| API | http://localhost:5000 |
+| Swagger UI (Development only) | http://localhost:5000/swagger |
+| Health check | http://localhost:5000/health |
+| Frontend | http://localhost:5173 |
+
+To send one test message to the chat endpoint: `./test-chat-api.ps1 -Message "list all employees"`.
+
+### 5. Build and test
+
+```powershell
+dotnet build EmployeeManagement/EmployeeManagement.slnx
+dotnet test  EmployeeManagement/EmployeeManagement.slnx
+
+cd EmployeeManagement-FE
+npm run build
+```
+
+If Visual Studio is running the API and locks `bin/`, add `--artifacts-path artifacts` to the `dotnet` commands.
 
 ---
 
-## Bulk Operations (Table Paste)
+## API
 
-Paste any of these formats and the assistant handles the rest:
+All JSON uses camelCase. Enums are serialized as strings.
 
-**Markdown table**
-```
-| Full Name | Email           | Department | Salary |
-|-----------|-----------------|------------|--------|
-| Yusuf     | y@example.com   | IT         | 50000  |
-| Rahul     | r@example.com   | HR         | 45000  |
-```
-
-**CSV**
-```
-Full Name,Email,Department,Salary
-Yusuf,y@example.com,IT,50000
-```
-
----
-
-## Project Structure
-
-```
-EComm-MCP/
-├── EmployeeManagement/           # .NET backend
-│   └── src/
-│       ├── EmployeeManagement.Api/           # Controllers, Program.cs, Middleware
-│       ├── EmployeeManagement.Application/   # Services, DTOs, AI abstractions
-│       │   └── AI/                           # IAIProviderService, Factory, Providers
-│       ├── EmployeeManagement.Domain/        # Employee entity
-│       └── EmployeeManagement.Infrastructure/ # EF Core, Repositories
-│
-└── EmployeeManagement-FE/        # React frontend
-    └── src/
-        ├── api/            # Centralized API clients (employees.api.ts, chat.api.ts)
-        ├── components/     # Header, ChatBot, chat/ChatMessage, chat/ChatInput, shared/
-        ├── hooks/          # useChat, useToast
-        ├── pages/          # EmployeeList, EmployeeForm
-        └── types/          # employee.types.ts, chat.types.ts
-```
-
----
-
-## API Endpoints
-
-### Employee CRUD
+### Employees
 
 | Method | Path | Description |
 |---|---|---|
-| GET | `/api/employees` | Paginated list with optional search/department filter |
-| GET | `/api/employees/{id}` | Get single employee |
-| POST | `/api/employees` | Create employee |
-| PUT | `/api/employees/{id}` | Update employee |
-| DELETE | `/api/employees/{id}` | Delete employee |
+| GET | `/api/employees?pageNumber=1&pageSize=10&search=&department=` | Paged list, optional name/email search and department filter |
+| GET | `/api/employees/{id}` | One employee |
+| POST | `/api/employees` | Create an employee |
+| PUT | `/api/employees/{id}` | Update an employee |
+| DELETE | `/api/employees/{id}` | Delete an employee |
+
+Create or update body:
+
+```json
+{ "fullName": "Jane Doe", "email": "jane@example.com", "department": "Engineering", "salary": 85000 }
+```
+
+Employee:
+
+```json
+{ "id": 1, "fullName": "Jane Doe", "email": "jane@example.com", "department": "Engineering",
+  "salary": 85000, "createdAt": "2026-01-01T00:00:00Z", "updatedAt": "2026-01-01T00:00:00Z" }
+```
+
+List response:
+
+```json
+{ "data": [ /* employees */ ], "pageNumber": 1, "pageSize": 10, "totalCount": 42,
+  "totalPages": 5, "hasNextPage": true, "hasPreviousPage": false }
+```
+
+Errors from these endpoints use one shape (validation errors fill `errors`):
+
+```json
+{ "message": "One or more validation errors occurred.", "statusCode": 400,
+  "correlationId": "...", "errors": { "Email": ["..."] }, "timestamp": "..." }
+```
 
 ### Chat
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/api/chat/message` | Send a message, receive AI-generated response |
+| POST | `/api/chat/message` | Send one user message and get the assistant's reply |
 
-**Chat request:**
+Request:
+
 ```json
 {
-  "message": "Add John Doe, john@example.com, Engineering, 85000",
-  "sessionId": "my-session-id",
+  "message": "Add Jane Doe, jane@example.com, Engineering, 85000",
+  "sessionId": "any-stable-id-per-conversation",
   "context": {},
-  "preferredProvider": "OpenRouter"
+  "preferredModel": null
 }
+```
+
+- `message` and `sessionId` are required. A missing value returns `400` with `{ "error": "..." }`.
+- `context` is the `updatedContext` from the previous reply. Send it back unchanged.
+- `preferredModel` is optional. A value that is not in `AllowedModels` returns `400`.
+
+Response:
+
+```json
+{
+  "responseText": "Created Jane Doe (ID 12).",
+  "type": "SUCCESS",
+  "data": { },
+  "updatedContext": { },
+  "providerUsed": "OpenRouter",
+  "modelUsed": "nvidia/nemotron-3-ultra-550b-a55b:free"
+}
+```
+
+`type` is one of `SUCCESS`, `ERROR`, `CLARIFICATION`, `INFO`, `CONFIRMATION`. `data` depends on the operation
+(an employee, a list, a bulk preview or bulk results).
+
+### Chat examples
+
+| You type | What happens |
+|---|---|
+| "Add Yusuf, yusuf@example.com, IT, 50000" | The AI extracts the fields and the backend creates the employee |
+| "Add Yusuf" | The assistant asks for the missing fields |
+| "Show all employees" / "Who works in IT?" | List or filtered search |
+| "Delete Yusuf" | The assistant asks for confirmation before deleting |
+| Paste a Markdown or CSV table | The rows are parsed and previewed, then created after confirmation |
+
+---
+
+## Project structure
+
+```
+EComm-MCP/
+├── EmployeeManagement/                    # .NET backend (EmployeeManagement.slnx)
+│   └── src/
+│       ├── EmployeeManagement.Api/            # Controllers, middleware, Program.cs, appsettings
+│       ├── EmployeeManagement.Application/    # Services, DTOs, validators, AI provider (OpenRouter)
+│       ├── EmployeeManagement.Domain/         # Employee entity
+│       └── EmployeeManagement.Infrastructure/ # EF Core DbContext, migrations, repository
+├── EmployeeManagement-FE/                 # React + TypeScript + Vite frontend
+│   └── src/  (api/, components/, hooks/, pages/, types/)
+├── docs/archive/                          # Historical notes (not maintained)
+├── start-dev.ps1                          # Starts API + frontend for local development
+└── test-chat-api.ps1                      # Sends one request to POST /api/chat/message
 ```
 
 ---
 
-## Security Notes
+## Known issues
 
-- API keys are read from configuration; never log or expose them.
-- All CRUD operations are validated by the backend — the AI never executes database operations directly.
-- AI-extracted entities are always validated by FluentValidation before persistence.
-- CORS is restricted to `http://localhost:5173` and `http://localhost:3000` by default.
+These are tracked and being fixed in stages:
 
----
-
-## Logging
-
-The application uses Serilog with structured logging and correlation IDs.  
-Every request receives an `X-Correlation-ID` header for end-to-end tracing.
-
-Log levels follow these defaults:
-- `Information` — all application events
-- `Warning` — recoverable errors, retries
-- `Error` — unhandled exceptions, provider failures
-
----
-
-## Adding a New AI Provider
-
-1. Implement `IAIProviderService` in `Application/AI/Providers/`
-2. Add a matching options class extending `BaseProviderOptions` in `AIProviderOptions.cs`
-3. Register the new provider in `Program.cs`:
-   ```csharp
-   builder.Services.AddHttpClient<MyNewProvider>(...);
-   builder.Services.AddSingleton<IAIProviderService, MyNewProvider>();
-   ```
-4. Add configuration to `appsettings.json` and set `DefaultProvider` to use it.
-
----
+- **No authentication** (see [Security status](#security-status)).
+- **Fresh database migrations:** the current migration chain may not apply cleanly to a brand-new, empty database.
+- **Multi-turn chat flows** (delete confirmation, bulk create, update and delete) are unreliable, because the
+  chat context round-trips through the client.
+- **Tests:** there are no working automated tests yet. The old `EmployeeManagement.Infrastructure.Tests` project
+  targets a removed component and is not part of the solution.
+- No rate limiting or input size limits on the chat endpoint yet.

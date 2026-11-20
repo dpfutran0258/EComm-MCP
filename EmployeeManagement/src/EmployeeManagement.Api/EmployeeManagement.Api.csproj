@@ -5,7 +5,6 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <DocumentationFile>$(OutputPath)EmployeeManagement.Api.xml</DocumentationFile>
     <NoWarn>1591</NoWarn>
     <UserSecretsId>96019ef4-d2e7-4f47-9714-a71c0a8fd478</UserSecretsId>
   </PropertyGroup>

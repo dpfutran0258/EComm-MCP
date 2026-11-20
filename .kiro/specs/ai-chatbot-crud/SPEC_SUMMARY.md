@@ -1,3 +1,5 @@
+> SUPERSEDED: this spec describes the original design. The ChatMcpServer (MCP intent detection) and the Gemini provider were removed; the current code uses OpenRouter only and has no MCP server. There are currently no passing automated tests. See /README.md for the current state.
+
 # AI Chatbot CRUD Feature - Specification Summary
 
 ## 🎯 Project Overview
@@ -449,10 +451,10 @@ A: Not initially. The chat UI is responsive and works on mobile browsers.
 ✅ All 3 spec files reviewed and approved  
 ✅ Backend implemented with all CRUD handlers  
 ✅ Frontend chat UI fully functional  
-✅ MCP intent detection working (≥95% accuracy)  
-✅ All tests passing  
+⬜ MCP intent detection working (≥95% accuracy) — not met: MCP server removed  
+⬜ All tests passing — not met: no working automated tests yet  
 ✅ Documentation complete  
-✅ Deployed to production  
+⬜ Deployed to production — not met: localhost demo, no authentication  
 ✅ Success metrics achieved  
 ✅ User feedback positive  
 
