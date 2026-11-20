@@ -1,15 +1,15 @@
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using EmployeeManagement.Application.DTOs;
 using Microsoft.Extensions.Logging;
 
 namespace EmployeeManagement.Application.AI.Providers;
 
 /// <summary>
-/// OpenRouter AI provider adapter (supports NVIDIA Nemotron, GPT-4o-mini, and all OpenRouter models).
-/// Implements the OpenAI-compatible chat completions API.
+/// OpenRouter adapter using the OpenAI-compatible chat completions API with native tool calling.
+/// The system prompt and the transcript are sent as messages; the available MCP tools are sent as
+/// <c>tools</c>, and the model answers with text or <c>tool_calls</c>.
 /// </summary>
 public sealed class OpenRouterAIProvider : IAIProviderService
 {
@@ -18,12 +18,6 @@ public sealed class OpenRouterAIProvider : IAIProviderService
     private readonly OpenRouterProviderOptions _options;
     private readonly ILogger<OpenRouterAIProvider> _logger;
     private readonly HttpClient _httpClient;
-
-    private static readonly JsonSerializerOptions JsonOpts = new()
-    {
-        PropertyNameCaseInsensitive = true,
-        Converters = { new JsonStringEnumConverter() }
-    };
 
     public string ProviderName => "OpenRouter";
     public string ModelName => _options.Model;
@@ -36,130 +30,91 @@ public sealed class OpenRouterAIProvider : IAIProviderService
         _httpClient.Timeout = TimeSpan.FromSeconds(_options.TimeoutSeconds);
     }
 
-    public string ProviderDisplayName => $"{ProviderName} ({_options.Model})";
-
-    public async Task<AIResponse> ProcessChatAsync(AIRequest request, CancellationToken cancellationToken = default)
+    public async Task<AIChatTurn> CompleteAsync(
+        IReadOnlyList<ChatMessageDto> messages,
+        IReadOnlyList<ToolDefinition> tools,
+        string? preferredModel,
+        CancellationToken cancellationToken = default)
     {
-        var start = DateTime.UtcNow;
         // Only honour a client-requested model when it is explicitly allow-listed.
-        var model = _options.IsModelAllowed(request.PreferredModel) ? request.PreferredModel! : _options.Model;
-        var retryCounter = new RetryCounter();
+        var model = _options.IsModelAllowed(preferredModel) ? preferredModel! : _options.Model;
+        var started = DateTime.UtcNow;
 
-        try
-        {
-            _logger.LogInformation(
-                "OpenRouter request starting. Session={SessionId}, Model={Model}, HistoryCount={Count}",
-                request.SessionId, model, request.History.Count);
+        var body = BuildRequestBody(messages, tools, model);
+        var raw = await CallWithRetriesAsync(body, cancellationToken);
+        var turn = ParseResponse(raw, model);
 
-            if (_options.EnableDetailedLogging)
-            {
-                _logger.LogDebug("User message: {Message}", request.UserMessage);
-                _logger.LogDebug("Employee context count: {Count}", request.EmployeeContext.Count);
-            }
+        _logger.LogInformation(
+            "OpenRouter completion. Model={Model}, ToolCalls={ToolCalls}, HasText={HasText}, Duration={Duration}ms",
+            model, turn.ToolCalls.Count, !string.IsNullOrWhiteSpace(turn.Text),
+            (int)(DateTime.UtcNow - started).TotalMilliseconds);
 
-            var messages = BuildMessages(request);
-            var rawJson = await CallWithRetriesAsync(messages, model, retryCounter, cancellationToken);
-            
-            if (_options.EnableDetailedLogging)
-            {
-                _logger.LogDebug("Raw AI response: {Response}", rawJson);
-            }
-            
-            var aiResponse = ParseResponse(rawJson);
-
-            if (_options.EnableDetailedLogging)
-            {
-                _logger.LogDebug(
-                    "Extracted entities: FullName={FullName}, Email={Email}, EmployeeId={EmployeeId}, Department={Department}, Salary={Salary}",
-                    aiResponse.Entities.FullName,
-                    aiResponse.Entities.Email,
-                    aiResponse.Entities.EmployeeId,
-                    aiResponse.Entities.Department,
-                    aiResponse.Entities.Salary);
-            }
-
-            var duration = DateTime.UtcNow - start;
-            _logger.LogInformation(
-                "OpenRouter response received. Session={SessionId}, Intent={Intent}, Confidence={Confidence}, Duration={Duration}ms, Retries={Retries}",
-                request.SessionId, aiResponse.Intent, aiResponse.Confidence, (int)duration.TotalMilliseconds, retryCounter.Count);
-
-            return aiResponse with
-            {
-                Metadata = aiResponse.Metadata with
-                {
-                    Provider = ProviderName,
-                    Model = model,
-                    Duration = duration,
-                    RetryCount = retryCounter.Count
-                }
-            };
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "OpenRouter provider failed. Session={SessionId}", request.SessionId);
-            return AIResponse.Fallback(ProviderName, ex.Message) with
-            {
-                Metadata = new AIResponseMetadata
-                {
-                    Provider = ProviderName,
-                    Model = model,
-                    Duration = DateTime.UtcNow - start,
-                    RetryCount = retryCounter.Count,
-                    Error = ex.Message
-                }
-            };
-        }
+        return turn;
     }
 
-    private List<object> BuildMessages(AIRequest request)
+    // ── Request ──────────────────────────────────────────────────────────────
+
+    private string BuildRequestBody(IReadOnlyList<ChatMessageDto> messages, IReadOnlyList<ToolDefinition> tools, string model)
     {
-        var systemPrompt = AISystemPromptBuilder.Build(request.EmployeeContext);
-        var messages = new List<object>
+        var wireMessages = new List<object>
         {
-            new { role = "system", content = systemPrompt }
+            new { role = "system", content = ChatSystemPrompt.Text }
         };
 
-        // Inject conversation history
-        if (_options.EnableDetailedLogging && request.History.Count > 0)
+        foreach (var m in messages)
         {
-            _logger.LogDebug("Including {Count} conversation history messages:", request.History.Count);
-            foreach (var msg in request.History)
+            switch (m.Role)
             {
-                _logger.LogDebug("  [{Role}] {Content}", msg.Role, 
-                    msg.Content.Length > 100 ? msg.Content.Substring(0, 100) + "..." : msg.Content);
+                case "assistant" when m.ToolCalls is { Count: > 0 }:
+                    wireMessages.Add(new
+                    {
+                        role = "assistant",
+                        content = string.IsNullOrWhiteSpace(m.Content) ? null : m.Content,
+                        tool_calls = m.ToolCalls.Select(tc => new
+                        {
+                            id = tc.Id,
+                            type = "function",
+                            function = new { name = tc.Name, arguments = tc.Arguments }
+                        }).ToList()
+                    });
+                    break;
+                case "assistant":
+                    wireMessages.Add(new { role = "assistant", content = m.Content ?? string.Empty });
+                    break;
+                case "tool":
+                    wireMessages.Add(new { role = "tool", tool_call_id = m.ToolCallId ?? string.Empty, content = m.Content ?? string.Empty });
+                    break;
+                default:
+                    wireMessages.Add(new { role = "user", content = m.Content ?? string.Empty });
+                    break;
             }
         }
 
-        foreach (var msg in request.History)
-            messages.Add(new { role = msg.Role, content = msg.Content });
-
-        messages.Add(new { role = "user", content = request.UserMessage });
-        
-        if (_options.EnableDetailedLogging)
+        var body = new Dictionary<string, object?>
         {
-            _logger.LogDebug("Total messages being sent to AI: {Count} (1 system + {History} history + 1 user)", 
-                messages.Count, request.History.Count);
+            ["model"] = model,
+            ["messages"] = wireMessages,
+            ["temperature"] = _options.Temperature,
+            ["top_p"] = _options.TopP,
+            ["max_tokens"] = _options.MaxOutputTokens
+        };
+
+        if (tools.Count > 0)
+        {
+            body["tools"] = tools.Select(t => new
+            {
+                type = "function",
+                function = new { name = t.Name, description = t.Description, parameters = t.ParametersSchema }
+            }).ToList();
+            body["tool_choice"] = "auto";
         }
-        
-        return messages;
+
+        return JsonSerializer.Serialize(body);
     }
 
-    private async Task<string> CallWithRetriesAsync(
-        List<object> messages,
-        string model,
-        RetryCounter retryCounter,
-        CancellationToken cancellationToken)
+    private async Task<string> CallWithRetriesAsync(string json, CancellationToken cancellationToken)
     {
         var url = $"{_options.BaseUrl.TrimEnd('/')}/chat/completions";
-        var requestBody = new
-        {
-            model,
-            messages,
-            temperature = _options.Temperature,
-            top_p = _options.TopP,
-            max_tokens = _options.MaxOutputTokens
-        };
-        var json = JsonSerializer.Serialize(requestBody);
 
         for (int attempt = 1; attempt <= MaxRetries; attempt++)
         {
@@ -175,7 +130,6 @@ public sealed class OpenRouterAIProvider : IAIProviderService
             }
             catch (Exception ex) when (attempt < MaxRetries && !cancellationToken.IsCancellationRequested)
             {
-                retryCounter.Count++;
                 _logger.LogWarning(ex, "OpenRouter network error on attempt {Attempt}/{Max}", attempt, MaxRetries);
                 await Task.Delay(GetRetryDelay(attempt), cancellationToken);
                 continue;
@@ -189,7 +143,6 @@ public sealed class OpenRouterAIProvider : IAIProviderService
 
                 if (IsRetryableStatus(response.StatusCode) && attempt < MaxRetries)
                 {
-                    retryCounter.Count++;
                     _logger.LogWarning("OpenRouter returned {Status}, retrying {Attempt}/{Max}", (int)response.StatusCode, attempt + 1, MaxRetries);
                     await Task.Delay(GetRetryDelay(attempt), cancellationToken);
                     continue;
@@ -202,123 +155,50 @@ public sealed class OpenRouterAIProvider : IAIProviderService
         throw new HttpRequestException("OpenRouter API failed after all retries.");
     }
 
-    private AIResponse ParseResponse(string apiResponse)
+    // ── Response ─────────────────────────────────────────────────────────────
+
+    private AIChatTurn ParseResponse(string apiResponse, string model)
     {
-        try
-        {
-            using var doc = JsonDocument.Parse(apiResponse);
-            var root = doc.RootElement;
-
-            if (!root.TryGetProperty("choices", out var choices) || choices.GetArrayLength() == 0)
-                throw new InvalidOperationException("OpenRouter returned no choices.");
-
-            var content = choices[0].GetProperty("message").GetProperty("content").GetString() ?? string.Empty;
-
-            // Aggressive cleanup for malformed responses
-            content = content.Trim();
-            
-            // Remove markdown fences
-            if (content.StartsWith("```"))
-            {
-                content = content.Replace("```json", "").Replace("```", "").Trim();
-            }
-            
-            // Some models wrap JSON in extra text — extract JSON if present
-            var jsonStart = content.IndexOf('{');
-            var jsonEnd = content.LastIndexOf('}');
-            if (jsonStart >= 0 && jsonEnd > jsonStart)
-            {
-                content = content.Substring(jsonStart, jsonEnd - jsonStart + 1);
-            }
-
-            return ParseAIJson(content, root);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to parse OpenRouter response.");
-            return AIResponse.Fallback(ProviderName, ex.Message);
-        }
-    }
-
-    private static AIResponse ParseAIJson(string json, JsonElement rootDoc)
-    {
-        using var doc = JsonDocument.Parse(json);
+        using var doc = JsonDocument.Parse(apiResponse);
         var root = doc.RootElement;
 
-        var entities = new ExtractedEntities();
-        if (root.TryGetProperty("entities", out var e))
+        if (!root.TryGetProperty("choices", out var choices) || choices.ValueKind != JsonValueKind.Array || choices.GetArrayLength() == 0)
+            throw new InvalidOperationException("OpenRouter returned no choices.");
+
+        var message = choices[0].GetProperty("message");
+
+        string? text = message.TryGetProperty("content", out var content) && content.ValueKind == JsonValueKind.String
+            ? content.GetString()
+            : null;
+
+        var toolCalls = new List<ChatToolCallDto>();
+        if (message.TryGetProperty("tool_calls", out var calls) && calls.ValueKind == JsonValueKind.Array)
         {
-            entities.EmployeeId = TryGetInt(e, "employeeId");
-            entities.FullName = TryGetString(e, "fullName");
-            entities.Email = TryGetString(e, "email");
-            entities.Department = TryGetString(e, "department");
-            entities.Salary = TryGetDecimal(e, "salary");
-            entities.SearchQuery = TryGetString(e, "searchQuery");
-            entities.BulkEmployees = TryGetBulkEmployees(e);
-            entities.BulkOperation = TryGetBulkOperation(e);
-        }
-
-        var suggestions = new List<string>();
-        if (root.TryGetProperty("suggestions", out var sugg) && sugg.ValueKind == JsonValueKind.Array)
-            suggestions = sugg.EnumerateArray()
-                .Select(s => s.GetString() ?? string.Empty)
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .ToList();
-
-        var intentStr = root.TryGetProperty("intent", out var i) ? i.GetString() : "UNKNOWN";
-        if (!Enum.TryParse<ChatIntent>(intentStr, ignoreCase: true, out var intent))
-            intent = ChatIntent.UNKNOWN;
-
-        var confidence = root.TryGetProperty("confidence", out var c) ? (decimal)c.GetDouble() : 0m;
-        var responseText = root.TryGetProperty("responseText", out var r)
-            ? r.GetString() ?? "I'm not sure how to respond to that."
-            : "I'm not sure how to respond to that.";
-
-        // Extract token usage if available
-        int? inputTokens = null, outputTokens = null;
-        if (rootDoc.TryGetProperty("usage", out var usage))
-        {
-            inputTokens = usage.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : null;
-            outputTokens = usage.TryGetProperty("completion_tokens", out var ct) ? ct.GetInt32() : null;
-        }
-
-        return new AIResponse
-        {
-            ResponseText = responseText,
-            Intent = intent,
-            Confidence = Math.Clamp(confidence, 0m, 1m),
-            Entities = entities,
-            Suggestions = suggestions,
-            Metadata = new AIResponseMetadata
+            foreach (var call in calls.EnumerateArray())
             {
-                InputTokens = inputTokens,
-                OutputTokens = outputTokens
+                if (!call.TryGetProperty("function", out var fn)) continue;
+                var name = fn.TryGetProperty("name", out var n) ? n.GetString() : null;
+                if (string.IsNullOrWhiteSpace(name)) continue;
+
+                var arguments = fn.TryGetProperty("arguments", out var a)
+                    ? a.ValueKind == JsonValueKind.String ? a.GetString() : a.GetRawText()
+                    : null;
+
+                toolCalls.Add(new ChatToolCallDto
+                {
+                    Id = call.TryGetProperty("id", out var id) && id.GetString() is { Length: > 0 } callId
+                        ? callId
+                        : $"call-{Guid.NewGuid():N}",
+                    Name = name,
+                    Arguments = string.IsNullOrWhiteSpace(arguments) ? "{}" : arguments
+                });
             }
-        };
-    }
+        }
 
-    public async Task<bool> HealthCheckAsync(CancellationToken cancellationToken = default)
-    {
-        try
-        {
-            var req = new AIRequest
-            {
-                UserMessage = "Hello",
-                SessionId = "health-check",
-                EmployeeContext = new List<EmployeeContextItem>()
-            };
-            var result = await ProcessChatAsync(req, cancellationToken);
-            return !string.IsNullOrEmpty(result.ResponseText);
-        }
-        catch
-        {
-            return false;
-        }
+        return new AIChatTurn(text, toolCalls, ProviderName, model);
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
-
-    private sealed class RetryCounter { public int Count { get; set; } }
 
     private static bool IsRetryableStatus(System.Net.HttpStatusCode code) =>
         code == System.Net.HttpStatusCode.TooManyRequests ||
@@ -329,39 +209,4 @@ public sealed class OpenRouterAIProvider : IAIProviderService
 
     private static TimeSpan GetRetryDelay(int attempt) =>
         TimeSpan.FromSeconds(Math.Pow(2, attempt) + Random.Shared.NextDouble());
-
-    private static string? TryGetString(JsonElement e, string prop) =>
-        e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-
-    private static int? TryGetInt(JsonElement e, string prop) =>
-        e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : null;
-
-    private static decimal? TryGetDecimal(JsonElement e, string prop) =>
-        e.TryGetProperty(prop, out var v) && v.ValueKind == JsonValueKind.Number ? (decimal)v.GetDouble() : null;
-
-    private static List<BulkEmployeeData>? TryGetBulkEmployees(JsonElement entities)
-    {
-        if (!entities.TryGetProperty("bulkEmployees", out var arr) || arr.ValueKind != JsonValueKind.Array)
-            return null;
-
-        var list = new List<BulkEmployeeData>();
-        foreach (var item in arr.EnumerateArray())
-        {
-            list.Add(new BulkEmployeeData
-            {
-                FullName = TryGetString(item, "fullName") ?? TryGetString(item, "name"),
-                Email = TryGetString(item, "email"),
-                Department = TryGetString(item, "department"),
-                Salary = TryGetDecimal(item, "salary")
-            });
-        }
-        return list.Count > 0 ? list : null;
-    }
-
-    private static BulkOperationType? TryGetBulkOperation(JsonElement entities)
-    {
-        var val = TryGetString(entities, "bulkOperation");
-        if (val is null) return null;
-        return Enum.TryParse<BulkOperationType>(val, ignoreCase: true, out var r) ? r : null;
-    }
 }

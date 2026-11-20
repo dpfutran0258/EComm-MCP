@@ -15,7 +15,7 @@ interface ChatBotProps {
  * Renders Markdown, bulk operation previews, and confirmation flows.
  */
 function ChatBot({ isOpen, onClose }: ChatBotProps) {
-    const { messages, isLoading, sendMessage, clearMessages } = useChat()
+    const { messages, isLoading, sendMessage, confirmAction, cancelAction, clearMessages } = useChat()
     const bottomRef = useRef<HTMLDivElement>(null)
     const panelRef = useRef<HTMLElement>(null)
 
@@ -101,7 +101,13 @@ function ChatBot({ isOpen, onClose }: ChatBotProps) {
                     ) : (
                         <>
                             {messages.map((m) => (
-                                <ChatMessage key={m.id} message={m} />
+                                <ChatMessage
+                                    key={m.id}
+                                    message={m}
+                                    busy={isLoading}
+                                    onConfirm={confirmAction}
+                                    onCancel={cancelAction}
+                                />
                             ))}
                             {isLoading && <TypingIndicator />}
                             <div ref={bottomRef} />

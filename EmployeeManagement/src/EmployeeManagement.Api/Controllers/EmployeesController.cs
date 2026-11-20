@@ -68,6 +68,15 @@ public sealed class EmployeesController : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Returns the distinct department names in use (for filter suggestions).</summary>
+    /// <response code="200">Department names, sorted alphabetically.</response>
+    [HttpGet("departments")]
+    [ProducesResponseType(typeof(List<string>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<List<string>>> GetDepartments(CancellationToken cancellationToken)
+    {
+        return Ok(await _employeeService.GetDepartmentsAsync());
+    }
+
     /// <summary>Updates an existing employee.</summary>
     /// <response code="200">Updated successfully.</response>
     /// <response code="400">Validation error.</response>

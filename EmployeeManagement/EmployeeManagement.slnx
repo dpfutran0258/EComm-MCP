@@ -4,5 +4,6 @@
     <Project Path="src/EmployeeManagement.Application/EmployeeManagement.Application.csproj" />
     <Project Path="src/EmployeeManagement.Domain/EmployeeManagement.Domain.csproj" />
     <Project Path="src/EmployeeManagement.Infrastructure/EmployeeManagement.Infrastructure.csproj" />
+    <Project Path="src/EmployeeManagement.Tests/EmployeeManagement.Tests.csproj" />
   </Folder>
 </Solution>

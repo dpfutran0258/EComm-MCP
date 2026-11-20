@@ -108,6 +108,25 @@ public class EmployeeService : IEmployeeService
         await _repository.DeleteAsync(id);
     }
 
+    public Task<List<string>> GetDepartmentsAsync() => _repository.GetDepartmentsAsync();
+
+    public async Task<SalaryStatsDto> GetSalaryStatsAsync(string? department = null)
+    {
+        var groups = await _repository.GetDepartmentStatsAsync(department);
+        var count = groups.Sum(g => g.Count);
+        var total = groups.Sum(g => g.TotalSalary);
+
+        return new SalaryStatsDto
+        {
+            EmployeeCount = count,
+            TotalSalary = total,
+            AverageSalary = count == 0 ? 0 : Math.Round(total / count, 2),
+            MinSalary = groups.Count == 0 ? 0 : groups.Min(g => g.MinSalary),
+            MaxSalary = groups.Count == 0 ? 0 : groups.Max(g => g.MaxSalary),
+            ByDepartment = groups
+        };
+    }
+
     private EmployeeDto MapToDto(Employee employee)
     {
         return new EmployeeDto

@@ -29,7 +29,7 @@ public abstract class BaseProviderOptions
     public int MaxOutputTokens { get; set; } = 2048;
 
     /// <summary>Sampling temperature — higher values produce more creative outputs.</summary>
-    public double Temperature { get; set; } = 0.7;
+    public double Temperature { get; set; } = 0.2;
 
     /// <summary>Nucleus sampling parameter.</summary>
     public double TopP { get; set; } = 0.95;

@@ -7,8 +7,33 @@ The assistant uses a large language model through [OpenRouter](https://openroute
 This README is the single source of truth for the project. Older notes live in [docs/archive](docs/archive/README.md)
 and may not match the code.
 
-> **About the name:** the repository folder is called `EComm-MCP`, but the project is neither an e-commerce
-> application nor an MCP (Model Context Protocol) server. An earlier MCP-based design was removed.
+> **About the name:** the repository folder is called `EComm-MCP`, but this is not an e-commerce application.
+> The "MCP" is real: the API hosts an [MCP](https://modelcontextprotocol.io) server (`/mcp`) whose tools manage
+> employees, and the chat assistant is an MCP client that lets the AI choose those tools. See
+> [How the chat works](#how-the-chat-works).
+
+## How the chat works
+
+The user types normal text. The AI model decides which **MCP tool** to call, and the application performs it.
+
+```
+Browser ── POST /api/chat { messages: [...transcript...] } ──► ChatAgentService (MCP client + agent loop)
+                                                                   │  tools/list, tools/call (MCP over HTTP)
+                                                                   ▼
+                                       /mcp  MCP server: EmployeeTools ──► EmployeeService ──► PostgreSQL
+```
+
+- **Context is sent in the request.** The browser keeps the transcript (user messages, the assistant's tool calls,
+  tool results, answers) and sends all of it with every message. The server keeps no conversation state. That is how
+  "give her a 10% raise" or "delete the second one" works: the model sees the earlier results, including employee ids.
+- **Tools** (`EmployeeManagement.Api/Mcp/EmployeeTools.cs`): `list_employees`, `find_employees`, `get_employee`,
+  `create_employee`, `update_employee`, `delete_employee`, `bulk_create_employees`, `bulk_update_employees`,
+  `bulk_delete_employees`, `list_departments`, `get_salary_stats`. They use the same service and validators as the REST API.
+- **Deleting needs a click.** Tools marked destructive (`delete_employee`, `bulk_delete_employees`) are never run on the
+  model's say-so. The chat shows **Confirm / Cancel** buttons; Confirm sends a signed, 5-minute token
+  (ASP.NET Data Protection) and the server runs the action without involving the model.
+- The same `/mcp` endpoint works with any MCP client (for example `npx @modelcontextprotocol/inspector` pointed at
+  `http://localhost:5000/mcp`). It only accepts loopback connections because there is no authentication yet.
 
 ---
 
@@ -25,8 +50,8 @@ What is in place today:
 - Startup fails with a non-zero exit code if the connection string or the AI settings are missing or invalid.
 - Clients cannot choose arbitrary LLM models. `preferredModel` must be in `AI:OpenRouter:AllowedModels`
   (or equal the configured `Model`), otherwise the chat endpoint returns `400`.
-- The AI never touches the database directly. It only proposes an intent and entities, and the backend validates
-  them with FluentValidation before saving.
+- The AI never touches the database directly. It can only call the MCP tools, which validate with FluentValidation
+  before saving, and destructive tools need an explicit user confirmation.
 - CORS allows only `http://localhost:5173` and `http://localhost:3000` by default.
 
 This is a working localhost demo, not a production-ready system. See [Known issues](#known-issues).
@@ -39,7 +64,8 @@ This is a working localhost demo, not a production-ready system. See [Known issu
 |---|---|
 | Backend | .NET 10, ASP.NET Core Web API (controllers), clean architecture: Api / Application / Domain / Infrastructure |
 | Database | PostgreSQL via EF Core 10 (Npgsql) |
-| AI | OpenRouter chat completions API (OpenAI-compatible). Default model `nvidia/nemotron-3-ultra-550b-a55b:free` |
+| AI | OpenRouter chat completions API (OpenAI-compatible) with native tool calling. Default model `nvidia/nemotron-3-ultra-550b-a55b:free` |
+| MCP | Official [`ModelContextProtocol.AspNetCore`](https://www.nuget.org/packages/ModelContextProtocol.AspNetCore) SDK: server at `/mcp` (stateless Streamable HTTP) and the chat host's client |
 | Validation | FluentValidation |
 | Logging | Serilog (console), with an `X-Correlation-ID` header on every request |
 | API docs | Swagger (Swashbuckle), Development environment only |
@@ -88,7 +114,7 @@ Non-secret AI settings are in `EmployeeManagement/src/EmployeeManagement.Api/app
 | `AllowedModels` | `["nvidia/nemotron-3-ultra-550b-a55b:free"]` | Models a client may request with `preferredModel` |
 | `BaseUrl` | `https://openrouter.ai/api/v1` | Must be an absolute http(s) URI |
 | `TimeoutSeconds` | `120` | Per-request HTTP timeout. Must be between 1 and 300 |
-| `MaxOutputTokens`, `Temperature`, `TopP` | `2048`, `0.7`, `0.95` | Sampling settings |
+| `MaxOutputTokens`, `Temperature`, `TopP` | `2048`, `0.2`, `0.95` | Sampling settings |
 | `EnableDetailedLogging` | `false` (`true` in Development) | Extra debug-level provider logs |
 
 The API validates these settings at startup and exits with code 1 if they are invalid or the API key is missing.
@@ -190,48 +216,62 @@ Errors from these endpoints use one shape (validation errors fill `errors`):
 
 | Method | Path | Description |
 |---|---|---|
-| POST | `/api/chat/message` | Send one user message and get the assistant's reply |
+| POST | `/api/chat` | Send the conversation and get the assistant's reply (or run a confirmed action) |
+| POST | `/mcp` | MCP server endpoint (Streamable HTTP, stateless, loopback only) |
 
-Request:
+Request (the transcript is the context; send everything the previous responses returned in `newMessages`):
 
 ```json
 {
-  "message": "Add Jane Doe, jane@example.com, Engineering, 85000",
-  "sessionId": "any-stable-id-per-conversation",
-  "context": {},
+  "messages": [
+    { "role": "user", "content": "find jane" },
+    { "role": "assistant", "content": null,
+      "toolCalls": [{ "id": "c1", "name": "find_employees", "arguments": "{\"query\":\"jane\"}" }] },
+    { "role": "tool", "toolCallId": "c1", "content": "{\"employees\":[{\"id\":7,\"fullName\":\"Jane Doe\"}]}" },
+    { "role": "assistant", "content": "I found Jane Doe (ID 7)." },
+    { "role": "user", "content": "give her a 10% raise" }
+  ],
+  "confirmAction": null,
   "preferredModel": null
 }
 ```
 
-- `message` and `sessionId` are required. A missing value returns `400` with `{ "error": "..." }`.
-- `context` is the `updatedContext` from the previous reply. Send it back unchanged.
+- `messages` must end with a non-empty user message. Only the roles `user`, `assistant` and `tool` are accepted.
+  The server keeps the last 40 messages / 60,000 characters and the request body is limited to 512 KB.
+- `confirmAction` is the `pendingAction.token` of a previous reply. When set, the action runs without the model.
 - `preferredModel` is optional. A value that is not in `AllowedModels` returns `400`.
 
 Response:
 
 ```json
 {
-  "responseText": "Created Jane Doe (ID 12).",
+  "responseText": "✅ Jane Doe was updated (salary: 80000 → 88000).",
   "type": "SUCCESS",
-  "data": { },
-  "updatedContext": { },
+  "newMessages": [ /* append these to your transcript */ ],
+  "toolActivity": [{ "tool": "get_employee", "isError": false }, { "tool": "update_employee", "isError": false }],
+  "data": { "employee": { }, "changes": [{ "field": "salary", "from": "80000", "to": "88000" }] },
+  "dataChanged": true,
+  "pendingAction": null,
   "providerUsed": "OpenRouter",
   "modelUsed": "nvidia/nemotron-3-ultra-550b-a55b:free"
 }
 ```
 
-`type` is one of `SUCCESS`, `ERROR`, `CLARIFICATION`, `INFO`, `CONFIRMATION`. `data` depends on the operation
-(an employee, a list, a bulk preview or bulk results).
+`type` is `SUCCESS`, `ERROR`, `CLARIFICATION`, `INFO` or `CONFIRMATION`. `dataChanged` is true when a tool changed
+employee data (the UI uses it to refresh the list). For `CONFIRMATION`, `pendingAction` holds
+`{ token, tool, summary, expiresAtUtc }`.
 
 ### Chat examples
 
 | You type | What happens |
 |---|---|
-| "Add Yusuf, yusuf@example.com, IT, 50000" | The AI extracts the fields and the backend creates the employee |
-| "Add Yusuf" | The assistant asks for the missing fields |
-| "Show all employees" / "Who works in IT?" | List or filtered search |
-| "Delete Yusuf" | The assistant asks for confirmation before deleting |
-| Paste a Markdown or CSV table | The rows are parsed and previewed, then created after confirmation |
+| "Add Yusuf, yusuf@example.com, IT, 50000" | The model calls `create_employee` |
+| "Add Yusuf" | The model asks for the missing fields (no tool call) |
+| "Show all employees" / "Who works in IT?" | `list_employees` (filters are case-insensitive) |
+| "Give her a 10% raise" | The model reads the salary from earlier results (or `get_employee`), then calls `update_employee` |
+| "What is the average salary in IT?" | `get_salary_stats` |
+| "Delete Yusuf" | Confirm / Cancel buttons appear; nothing is deleted until Confirm is pressed |
+| Paste a Markdown or CSV table | The model maps the columns and calls `bulk_create_employees`; each row reports success or its error |
 
 ---
 
@@ -241,27 +281,43 @@ Response:
 EComm-MCP/
 ├── EmployeeManagement/                    # .NET backend (EmployeeManagement.slnx)
 │   └── src/
-│       ├── EmployeeManagement.Api/            # Controllers, middleware, Program.cs, appsettings
-│       ├── EmployeeManagement.Application/    # Services, DTOs, validators, AI provider (OpenRouter)
+│       ├── EmployeeManagement.Api/            # Controllers, middleware, Program.cs, Mcp/ (MCP tools, MCP client, confirmation tokens)
+│       ├── EmployeeManagement.Application/    # Services, DTOs, validators, ChatAgentService, AI provider (OpenRouter)
 │       ├── EmployeeManagement.Domain/         # Employee entity
-│       └── EmployeeManagement.Infrastructure/ # EF Core DbContext, migrations, repository
+│       ├── EmployeeManagement.Infrastructure/ # EF Core DbContext, migrations, repository
+│       └── EmployeeManagement.Tests/          # xUnit: agent loop, MCP tools, in-memory API + MCP integration tests
 ├── EmployeeManagement-FE/                 # React + TypeScript + Vite frontend
 │   └── src/  (api/, components/, hooks/, pages/, types/)
 ├── docs/archive/                          # Historical notes (not maintained)
+├── GAP_ANALYSIS.md                        # Analysis of the pre-MCP implementation (see its status note)
 ├── start-dev.ps1                          # Starts API + frontend for local development
-└── test-chat-api.ps1                      # Sends one request to POST /api/chat/message
+└── test-chat-api.ps1                      # Sends one chat message to POST /api/chat
+```
+
+---
+
+## Tests
+
+```powershell
+dotnet test EmployeeManagement/EmployeeManagement.slnx --artifacts-path artifacts   # unit + in-memory integration, no DB, no LLM
+cd EmployeeManagement-FE; npm test
+```
+
+The backend integration tests host the real API, MCP server and MCP client in memory with a scripted model.
+An optional live check calls the real model (with in-memory data, never the dev database):
+
+```powershell
+$env:EM_OPENROUTER_KEY = '<key>'; dotnet test EmployeeManagement/EmployeeManagement.slnx --filter LiveLlmSmokeTests
 ```
 
 ---
 
 ## Known issues
 
-These are tracked and being fixed in stages:
-
-- **No authentication** (see [Security status](#security-status)).
+- **No authentication** (see [Security status](#security-status)). `/mcp` and `/api/chat` can create and delete data.
 - **Fresh database migrations:** the current migration chain may not apply cleanly to a brand-new, empty database.
-- **Multi-turn chat flows** (delete confirmation, bulk create, update and delete) are unreliable, because the
-  chat context round-trips through the client.
-- **Tests:** there are no working automated tests yet. The old `EmployeeManagement.Infrastructure.Tests` project
-  targets a removed component and is not part of the solution.
-- No rate limiting or input size limits on the chat endpoint yet.
+- **Model quality:** tool choice depends on the configured model. The default free model works for the flows above,
+  but a stronger model is more reliable for long or ambiguous requests (change `AI:OpenRouter:Model`).
+- **Mcp:Endpoint** must match the port the API listens on (default `http://localhost:5000/mcp`).
+- No rate limiting on the chat endpoint yet, so each message can spend LLM credits.
+- Concurrent edits of the same employee are not detected (no version/ETag yet).

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Serilog;
+using EmployeeManagement.Api.Mcp;
 using EmployeeManagement.Api.Middleware;
 using EmployeeManagement.Application.AI;
 using EmployeeManagement.Application.AI.Providers;
@@ -109,9 +110,26 @@ try
     // ── Application Services ──────────────────────────────────────────────────
     builder.Services.AddScoped<IEmployeeRepository, EmployeeRepository>();
     builder.Services.AddScoped<IEmployeeService, EmployeeService>();
-    builder.Services.AddSingleton<IConversationService, ConversationService>();
-    builder.Services.AddSingleton<TableParsingService>();
-    builder.Services.AddScoped<ChatService>();
+
+    // ── MCP server (employee tools) + chat host (MCP client + AI agent loop) ──
+    // The MCP server is stateless: every request is independent, no session to expire.
+    builder.Services.AddMcpServer()
+        .WithHttpTransport(o => o.Stateless = true)
+        .WithTools<EmployeeTools>();
+
+    builder.Services.AddOptions<McpClientOptions>()
+        .Bind(builder.Configuration.GetSection(McpClientOptions.SectionName))
+        .Validate(o => Uri.TryCreate(o.Endpoint, UriKind.Absolute, out var uri)
+                       && (uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeHttp),
+            "Mcp:Endpoint must be an absolute http(s) URI.")
+        .ValidateOnStart();
+    builder.Services.AddSingleton(sp => sp.GetRequiredService<IOptions<McpClientOptions>>().Value);
+    builder.Services.AddHttpClient(McpToolInvoker.HttpClientName);
+
+    builder.Services.AddDataProtection();
+    builder.Services.AddSingleton<IPendingActionProtector, PendingActionProtector>();
+    builder.Services.AddScoped<IToolInvoker, McpToolInvoker>();
+    builder.Services.AddScoped<ChatAgentService>();
 
     // ── Health Checks ─────────────────────────────────────────────────────────
     builder.Services.AddHealthChecks();
@@ -123,6 +141,7 @@ try
     Log.Information("AI provider ready: {Provider}", aiProvider.ProviderName);
 
     // ── Auto-migrate database ─────────────────────────────────────────────────
+    if (app.Configuration.GetValue("Database:MigrateOnStartup", true))
     using (var scope = app.Services.CreateScope())
     {
         var db = scope.ServiceProvider.GetRequiredService<EmployeeManagementDbContext>();
@@ -132,7 +151,24 @@ try
 
     // ── Middleware pipeline ───────────────────────────────────────────────────
     app.UseMiddleware<CorrelationIdMiddleware>();
+    // CORS must wrap the exception handler, otherwise error responses (400/404/500) carry no CORS headers
+    // and the browser reports them as network errors.
+    app.UseCors("FrontendPolicy");
     app.UseMiddleware<ExceptionHandlingMiddleware>();
+
+    // The MCP endpoint can create and delete data and has no authentication yet: loopback clients only.
+    app.UseWhen(
+        ctx => ctx.Request.Path.StartsWithSegments("/mcp"),
+        branch => branch.Use(async (ctx, next) =>
+        {
+            var remote = ctx.Connection.RemoteIpAddress;
+            if (remote is not null && !System.Net.IPAddress.IsLoopback(remote))
+            {
+                ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return;
+            }
+            await next();
+        }));
 
     if (app.Environment.IsDevelopment())
     {
@@ -143,7 +179,6 @@ try
     if (!app.Environment.IsDevelopment())
         app.UseHttpsRedirection();
 
-    app.UseCors("FrontendPolicy");
     app.UseSerilogRequestLogging(opts =>
     {
         opts.MessageTemplate = "HTTP {RequestMethod} {RequestPath} → {StatusCode} in {Elapsed:0.0}ms";
@@ -151,6 +186,7 @@ try
 
     app.UseAuthorization();
     app.MapControllers();
+    app.MapMcp("/mcp");
     app.MapHealthChecks("/health");
 
     app.Run();
@@ -164,3 +200,6 @@ finally
 {
     Log.CloseAndFlush();
 }
+
+// Makes the entry point visible to WebApplicationFactory in the test project.
+public partial class Program;

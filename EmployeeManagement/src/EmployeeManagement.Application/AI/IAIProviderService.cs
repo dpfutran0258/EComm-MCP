@@ -1,25 +1,20 @@
+using EmployeeManagement.Application.DTOs;
+
 namespace EmployeeManagement.Application.AI;
 
-/// <summary>
-/// Provider-independent interface for all AI integrations.
-/// Implement this interface to add a new AI provider without touching ChatService or business logic.
-/// </summary>
+/// <summary>Provider-independent chat-completion interface with tool calling.</summary>
 public interface IAIProviderService
 {
-    /// <summary>Human-readable provider name (e.g. "Gemini", "OpenRouter").</summary>
     string ProviderName { get; }
-
-    /// <summary>Model identifier currently in use.</summary>
     string ModelName { get; }
 
     /// <summary>
-    /// Sends a chat message to the AI and returns a structured response.
+    /// Sends the transcript and the available tools to the model and returns its next turn.
+    /// Throws when the provider cannot be reached or returns an error.
     /// </summary>
-    Task<AIResponse> ProcessChatAsync(AIRequest request, CancellationToken cancellationToken = default);
-
-    /// <summary>
-    /// Checks whether the provider is reachable and the API key is valid.
-    /// Returns false instead of throwing so callers can handle gracefully.
-    /// </summary>
-    Task<bool> HealthCheckAsync(CancellationToken cancellationToken = default);
+    Task<AIChatTurn> CompleteAsync(
+        IReadOnlyList<ChatMessageDto> messages,
+        IReadOnlyList<ToolDefinition> tools,
+        string? preferredModel,
+        CancellationToken cancellationToken = default);
 }

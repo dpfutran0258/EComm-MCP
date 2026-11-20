@@ -16,6 +16,7 @@
 
   <ItemGroup>
     <!-- Swagger -->
+    <PackageReference Include="ModelContextProtocol.AspNetCore" Version="2.4.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.3.1" />
     <!-- EF Tools (design-time only) -->
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.0">

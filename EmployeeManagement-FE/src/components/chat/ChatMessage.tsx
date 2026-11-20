@@ -1,12 +1,32 @@
 import ReactMarkdown from 'react-markdown'
-import type { ChatMessage as ChatMessageType, BulkOperationData } from '../../types/chat.types'
+import type { ChatMessage as ChatMessageType, BulkOperationData, SalaryStats, ToolActivity } from '../../types/chat.types'
 import './ChatMessage.css'
 
 interface ChatMessageProps {
     message: ChatMessageType
+    /** Runs the destructive action held by this message. */
+    onConfirm?: (messageId: string) => void
+    /** Dismisses the destructive action held by this message. */
+    onCancel?: (messageId: string) => void
+    /** Disables the Confirm/Cancel buttons while a request is running. */
+    busy?: boolean
 }
 
-export default function ChatMessage({ message }: ChatMessageProps) {
+const TOOL_LABELS: Record<string, string> = {
+    list_employees: 'Listed employees',
+    find_employees: 'Searched employees',
+    get_employee: 'Looked up an employee',
+    create_employee: 'Created an employee',
+    update_employee: 'Updated an employee',
+    delete_employee: 'Deleted an employee',
+    bulk_create_employees: 'Created employees',
+    bulk_update_employees: 'Updated employees',
+    bulk_delete_employees: 'Deleted employees',
+    list_departments: 'Listed departments',
+    get_salary_stats: 'Calculated salary stats',
+}
+
+export default function ChatMessage({ message, onConfirm, onCancel, busy = false }: ChatMessageProps) {
     const isUser = message.sender === 'user'
     const typeClass = message.type ? `message--${message.type.toLowerCase()}` : ''
 
@@ -43,9 +63,24 @@ export default function ChatMessage({ message }: ChatMessageProps) {
                         <BulkResultTable data={message.data as unknown as BulkOperationData} />
                     )}
 
-                    {/* Confirmation actions — rendered when type is CONFIRMATION */}
-                    {message.type === 'CONFIRMATION' && message.data?.['preview'] != null && (
-                        <BulkPreviewTable preview={message.data['preview'] as PreviewRow[]} />
+                    {/* Salary statistics */}
+                    {message.data && isStatsData(message.data) && (
+                        <StatsCard stats={message.data['stats'] as SalaryStats} />
+                    )}
+
+                    {/* Tools the assistant used for this answer */}
+                    {message.toolActivity && message.toolActivity.length > 0 && (
+                        <ToolChips activity={message.toolActivity} />
+                    )}
+
+                    {/* Destructive action waiting for the user */}
+                    {message.pendingAction && (
+                        <ConfirmActions
+                            message={message}
+                            busy={busy}
+                            onConfirm={onConfirm}
+                            onCancel={onCancel}
+                        />
                     )}
                 </div>
 
@@ -75,15 +110,6 @@ interface Employee {
     updatedAt?: string
 }
 
-interface PreviewRow {
-    row: number
-    fullName?: string
-    email?: string
-    department?: string
-    salary?: number
-    isValid: boolean
-}
-
 // ── Data detection helpers ────────────────────────────────────────────────────
 
 function hasEmployeeData(data: Record<string, unknown>): boolean {
@@ -98,6 +124,12 @@ function hasMultipleEmployees(data: Record<string, unknown>): boolean {
 function isBulkData(data: Record<string, unknown>): boolean {
     return Array.isArray(data.results) && typeof data.successCount === 'number'
 }
+
+function isStatsData(data: Record<string, unknown>): boolean {
+    return data.stats != null && typeof data.stats === 'object'
+}
+
+const money = (n: number) => `$${Math.round(n).toLocaleString()}`
 
 // ── Display components ────────────────────────────────────────────────────────
 
@@ -164,7 +196,7 @@ function BulkResultTable({ data }: { data: BulkOperationData }) {
         <div className="bulk-result">
             <div className="bulk-result__summary">
                 <span className="bulk-result__badge bulk-result__badge--success">
-                    ✅ {data.successCount} created
+                    ✅ {data.successCount} succeeded
                 </span>
                 {data.failCount > 0 && (
                     <span className="bulk-result__badge bulk-result__badge--error">
@@ -186,8 +218,8 @@ function BulkResultTable({ data }: { data: BulkOperationData }) {
                         <tr key={r.row} className={r.success ? 'row--success' : 'row--error'}>
                             <td>{r.row}</td>
                             <td>{r.success ? '✅' : '❌'}</td>
-                            <td>{(r.employee as Record<string, unknown>)?.fullName as string ?? '—'}</td>
-                            <td>{r.error ?? 'Created successfully'}</td>
+                            <td>{((r.employee as Record<string, unknown> | undefined)?.fullName as string | undefined) ?? r.name ?? '—'}</td>
+                            <td>{r.error ?? 'OK'}</td>
                         </tr>
                     ))}
                 </tbody>
@@ -196,41 +228,85 @@ function BulkResultTable({ data }: { data: BulkOperationData }) {
     )
 }
 
-function BulkPreviewTable({ preview }: { preview: PreviewRow[] }) {
-    const valid = preview.filter((r) => r.isValid).length
-    const invalid = preview.length - valid
+// ── Salary statistics ─────────────────────────────────────────────────────────
+
+function StatsCard({ stats }: { stats: SalaryStats }) {
     return (
-        <div className="bulk-preview">
-            <div className="bulk-preview__summary">
-                <span className="bulk-result__badge bulk-result__badge--success">{valid} valid</span>
-                {invalid > 0 && (
-                    <span className="bulk-result__badge bulk-result__badge--error">{invalid} invalid</span>
-                )}
+        <div className="stats-card">
+            <div className="stats-card__totals">
+                <span><strong>{stats.employeeCount}</strong> employees</span>
+                <span>Avg <strong>{money(stats.averageSalary)}</strong></span>
+                <span>Min <strong>{money(stats.minSalary)}</strong></span>
+                <span>Max <strong>{money(stats.maxSalary)}</strong></span>
             </div>
-            <table className="bulk-result__table" role="grid">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Name</th>
-                        <th>Email</th>
-                        <th>Dept</th>
-                        <th>Salary</th>
-                        <th>OK?</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {preview.map((r) => (
-                        <tr key={r.row} className={r.isValid ? 'row--success' : 'row--error'}>
-                            <td>{r.row}</td>
-                            <td>{r.fullName ?? '—'}</td>
-                            <td>{r.email ?? '—'}</td>
-                            <td>{r.department ?? '—'}</td>
-                            <td>{r.salary != null ? `$${r.salary.toLocaleString()}` : '—'}</td>
-                            <td>{r.isValid ? '✅' : '❌'}</td>
-                        </tr>
-                    ))}
-                </tbody>
-            </table>
+            {stats.byDepartment.length > 1 && (
+                <table className="bulk-result__table">
+                    <thead>
+                        <tr><th>Department</th><th>Count</th><th>Average</th></tr>
+                    </thead>
+                    <tbody>
+                        {stats.byDepartment.map((d) => (
+                            <tr key={d.department}>
+                                <td>{d.department}</td>
+                                <td>{d.count}</td>
+                                <td>{money(d.averageSalary)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            )}
+        </div>
+    )
+}
+
+// ── Tool activity ─────────────────────────────────────────────────────────────
+
+function ToolChips({ activity }: { activity: ToolActivity[] }) {
+    return (
+        <ul className="tool-chips" aria-label="Actions the assistant took">
+            {activity.map((a, i) => (
+                <li key={`${a.tool}-${i}`} className={`tool-chip${a.isError ? ' tool-chip--error' : ''}`}>
+                    {a.isError ? '⚠️' : '🔧'} {TOOL_LABELS[a.tool] ?? a.tool}
+                </li>
+            ))}
+        </ul>
+    )
+}
+
+// ── Confirmation of destructive actions ───────────────────────────────────────
+
+function ConfirmActions({ message, busy, onConfirm, onCancel }: {
+    message: ChatMessageType
+    busy: boolean
+    onConfirm?: (messageId: string) => void
+    onCancel?: (messageId: string) => void
+}) {
+    const state = message.pendingState ?? 'open'
+    const expired = message.pendingAction !== undefined
+        && Date.parse(message.pendingAction.expiresAtUtc) < Date.now()
+
+    if (state === 'confirmed') return <p className="confirm-actions__status">Confirmed</p>
+    if (state === 'cancelled') return <p className="confirm-actions__status">Cancelled</p>
+    if (expired) return <p className="confirm-actions__status">Expired, please ask again.</p>
+
+    return (
+        <div className="confirm-actions" role="group" aria-label="Confirm this action">
+            <button
+                type="button"
+                className="confirm-actions__btn confirm-actions__btn--danger"
+                disabled={busy}
+                onClick={() => onConfirm?.(message.id)}
+            >
+                Confirm
+            </button>
+            <button
+                type="button"
+                className="confirm-actions__btn"
+                disabled={busy}
+                onClick={() => onCancel?.(message.id)}
+            >
+                Cancel
+            </button>
         </div>
     )
 }
